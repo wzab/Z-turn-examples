@@ -1,0 +1,12 @@
+config BR2_PACKAGE_AXI4S2DMA_TEST
+	bool "axi4s2dma-test"
+	depends on BR2_LINUX_KERNEL
+	select BR2_PACKAGE_AXI4S2DMA_MODULE
+	help
+          Test application for AXI4S2DMA core.
+          It is available as an example for my VEXTPROJ project
+
+          http://github.com/wzab/vextproj
+
+comment "axi4s2dma test application needs a Linux kernel to be built"
+	depends on !BR2_LINUX_KERNEL
