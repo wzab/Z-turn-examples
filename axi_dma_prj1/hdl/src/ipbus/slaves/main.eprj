@@ -1,0 +1,7 @@
+vhdl work ipbus_ctrlreg.vhd
+vhdl work ipbus_ctrlreg_v.vhd
+vhdl work ipbus_ram.vhd
+vhdl work ipbus_reg.vhd
+vhdl work ipbus_reg_types.vhd
+
+

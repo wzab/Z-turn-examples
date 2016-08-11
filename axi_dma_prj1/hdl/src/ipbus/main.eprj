@@ -1,0 +1,10 @@
+vhdl work ipbus_fabric.vhd
+vhdl work ipbus_package.vhd
+vhdl work slaves.vhd
+vhdl[sim] work ipbus_ctrl.vhd
+vhdl[sim] work ipbus_ctrl_tb.vhd
+include decoder
+include slaves
+
+
+

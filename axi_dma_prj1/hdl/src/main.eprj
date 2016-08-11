@@ -1,0 +1,11 @@
+include bridge
+include ipbus
+include constr
+include axi4s
+#Uncomment line below , and comment the next one to avoid OOC
+include lfsr
+#Comment line above and uncomment line below to use OOC for LFSRs
+#include lfsr/lfsr_ooc.eprj
+include bd
+
+
