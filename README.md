@@ -23,7 +23,9 @@ Unfortunately it appeared, that it is not trivial to build the working FSBL in V
 The workflow that finally works for me is the following:
 
 * Ensure that your design has configured the following peripherials:
-  * ENET0 (connected to MIO16-27) with MDIO (connected to MIO52-53). Remember to connect the ENET0 clock to "IO PLL" (in my design it was connected to "External" by default)
+  * ENET0 (connected to MIO16-27) with MDIO (connected to MIO52-53). 
+    * Remember to connect the ENET0 clock to "IO PLL" (in my design it was connected to "External" by default)
+    * Remember to set all ENET0 signals to "fast" (except of tx_clk - MIO 16, which may be set to "slow")
   * SD0 (connected to MIO40-45). Remember to lower the clock frequency to 50 MHz (with default 125 MHz it won't work with most cards!)
   * UART1 (connected to MIO48-49)
 * After you compile your design, export the hardware (File -> Export -> Export hardware) locally to the project.
