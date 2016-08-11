@@ -43,6 +43,7 @@ The workflow that finally works for me is the following:
         /tmp/u-boot.elf
     }
   ```
+  Of course you must copy the U-Boot in the ELF format to /tmp/u-boot.elf, after it is compiled by Bildroot. Remember to switch off SPL and select the ELF format when compiling the Buildroot. I use the configuration "zynq_zed" for the U-Boot as there is no dedicated configuration for Z-turn.
   * In the SDK start the shell (Xilinx Tools -> Launch Shell) and in the shell do:
   ```
   $ cd fsbl/bootimage/
