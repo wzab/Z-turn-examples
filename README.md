@@ -14,10 +14,10 @@ I use the following uEnv.txt file located on the SD card:
     bootargs=console=ttyPS0,115200 root=/dev/mmcblk0p2 rw earlyprintk rootfstype=ext4 rootwait devtmpfs.mount=0
     ipaddr=172.19.3.33
     srvaddr=172.19.1.1
-    load_fpga=tftpboot ${kernel_load_address} ${srvaddr}:dma.bit && fpga loadb 0 ${kernel_load_address} 4045676
-    load_image=tftpboot ${kernel_load_address} ${srvaddr}:dma_uImage
-    load_dtb=tftpboot ${devicetree_load_address} ${srvaddr}:dma.dtb
-    uenvcmd=run load_fpga && echo Copying Linux from SD to RAM... && run load_image && run load_dtb && bootm ${kernel_load_address} - ${devicetree_load_address}
+    load_fpga=tftpboot ${kernel_load_address} ${srvaddr}:Zturn.bit && fpga loadb 0 ${kernel_load_address} 4045676
+    load_image=tftpboot ${kernel_load_address} ${srvaddr}:Zturn_uImage
+    load_dtb=tftpboot ${devicetree_load_address} ${srvaddr}:Zturn.dtb
+    uenvcmd=echo Loading FPGA bitstream... && run load_fpga && echo Loading kernel image from the server... && run load_image && Loading Device Tree... && run load_dtb && bootm ${kernel_load_address} - ${devicetree_load_address}
     
 Except of that my SD card contains only the BOOT.bin file generated in SDK
 
