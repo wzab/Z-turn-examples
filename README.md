@@ -5,8 +5,10 @@ Please note, that the Buildroot configuration in my designs sets the root passwo
 Setting the password is necessary to allow SSH login to the Z-Turn board. Of course you can easily modify that
 (either to set a better password or to delete the password at all).
 
+My examples use the [VEXTPROJ](https://github.com/wzab/vextproj) scripts for building the Vivado projects. 
+Therefore the HDL sources and other project configuration details may be stored in git-friendly form.
 
-# Test configuration
+## Test configuration
 
 My favorite configuration for working with Z-turn is to download the FPGA bit file, the DTB file and the kernel with initramfs from the TFTP server (172.19.1.1 in my setup). 
 I use the following uEnv.txt file located on the SD card:
@@ -21,7 +23,7 @@ I use the following uEnv.txt file located on the SD card:
     
 Except of that my SD card contains only the BOOT.bin file generated in SDK
 
-# How to get working FSBL for Z-turn with Vivado 2016.2
+## How to get working FSBL for Z-turn with Vivado 2016.2
 
 Unfortunately it appeared, that it is not trivial to build the working FSBL in Vivado 2016.2 working with Buildroot.
 The workflow that finally works for me is the following:
@@ -53,4 +55,4 @@ The workflow that finally works for me is the following:
   $ cd fsbl/bootimage/
   $ bootgen -arch zynq -image fsbl.bif -w on -o BOOT.bin
   ```
-  * 
+   
