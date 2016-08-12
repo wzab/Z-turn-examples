@@ -9,7 +9,7 @@
 
 const char dev_name[]="/dev/s2mm_0";
 
-#define BUF_SIZE 40
+#define BUF_SIZE 2000
 
 int main(int argc, char * argv[])
 {
@@ -61,7 +61,7 @@ int main(int argc, char * argv[])
   {
     int i;
     for(i=0;i<100;i++) {
-      printf("%4.4d  %4.4x\n",i,buf[i]);
+      printf("%4.4d -> %8.8x\n",i,buf[i]);
     }
   }
   res = ioctl(fdev,TST1_IOCTL_UNMAPBUF,0);
