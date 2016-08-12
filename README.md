@@ -1,6 +1,10 @@
 # Z-turn-examples
 The repository with my simple Z-turn examples, to be used as templates for more serious projects.
 
+Please note, that the Buildroot configuration in my designs sets the root password to "test".
+Setting the password is necessary to allow SSH login to the Z-Turn board. Of course you can easily modify that
+(either to set a better password or to delete the password at all).
+
 
 # Test configuration
 
