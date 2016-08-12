@@ -21,7 +21,7 @@ I use the following uEnv.txt file located on the SD card:
     
 Except of that my SD card contains only the BOOT.bin file generated in SDK
 
-# How to get working FSBL with Vivado 2016.2
+# How to get working FSBL for Z-turn with Vivado 2016.2
 
 Unfortunately it appeared, that it is not trivial to build the working FSBL in Vivado 2016.2 working with Buildroot.
 The workflow that finally works for me is the following:
