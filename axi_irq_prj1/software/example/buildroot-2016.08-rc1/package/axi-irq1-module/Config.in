@@ -1,0 +1,11 @@
+config BR2_PACKAGE_AXI_IRQ1_MODULE
+	bool "axi-irq1-module"
+	depends on BR2_LINUX_KERNEL
+	help
+          Driver for AXI IRQ1 core.
+          It is available as an example for my VEXTPROJ project
+
+          http://github.com/wzab/vextproj
+
+comment "axi-irq1 module needs a Linux kernel to be built"
+	depends on !BR2_LINUX_KERNEL
