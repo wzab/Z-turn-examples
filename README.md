@@ -7,6 +7,7 @@ Setting the password is necessary to allow SSH login to the Z-Turn board. Of cou
 
 My examples use the [VEXTPROJ](https://github.com/wzab/vextproj) scripts for building the Vivado projects. 
 Therefore the HDL sources and other project configuration details may be stored in git-friendly form.
+In each project there is the `hdl` directory with the `build.sh` script, which creates and builds the Vivado project (of course Vivado must be installed and accessible via PATH). After the project is created, you can open it in Vivado GUI and modify it interactively. There is also the `software` directory with the `build_soft` script, that downloads the Buildroot environment, configures it and compiles the related software. _Please note, that compilation of software should be done in a shell session without Vivado binaries in PATH. Otherwise strange problems e.g., with `awk` may occur._
 
 ## Test configuration
 
