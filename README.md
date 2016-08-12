@@ -41,7 +41,7 @@ The workflow that finally works for me is the following:
 * In the SDK create:
   * The new Board Support Package of type "device_tree". Build it and use the resulting dts and dtsi files in Buildroot.
   * The new Application Project of type "Zynq FSBL" with name "fsbl". This project requires a small adjustment:
-    * In the fsbl/src/fsbl\debug.h file add `define FSBL_DEBUG_INFO` before `#define DEBUG_GENERAL   0x00000001`. That ensures that FSBL displays possible error messages. Without that I wouldn't be able to resolve all problems related to the SD booting.
+    * In the `fsbl/src/fsbl_debug.h` file add `define FSBL_DEBUG_INFO` before `#define DEBUG_GENERAL   0x00000001`. That ensures that FSBL displays possible error messages. Without that I wouldn't be able to resolve all problems related to the SD booting.
   * Ufortunately the "Create Boot Image" option doesn't work for me. Therefore I had to create the bootimage directory and fsbl.bif file manually
   ```
     The_ROM_image:
