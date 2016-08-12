@@ -17,7 +17,7 @@ I use the following uEnv.txt file located on the SD card:
     load_fpga=tftpboot ${kernel_load_address} ${srvaddr}:Zturn.bit && fpga loadb 0 ${kernel_load_address} 4045676
     load_image=tftpboot ${kernel_load_address} ${srvaddr}:Zturn_uImage
     load_dtb=tftpboot ${devicetree_load_address} ${srvaddr}:Zturn.dtb
-    uenvcmd=echo Loading FPGA bitstream... && run load_fpga && echo Loading kernel image from the server... && run load_image && Loading Device Tree... && run load_dtb && bootm ${kernel_load_address} - ${devicetree_load_address}
+    uenvcmd=echo Loading FPGA bitstream... && run load_fpga && echo Loading kernel image from the server... && run load_image && echo Loading Device Tree... && run load_dtb && bootm ${kernel_load_address} - ${devicetree_load_address}
     
 Except of that my SD card contains only the BOOT.bin file generated in SDK
 
