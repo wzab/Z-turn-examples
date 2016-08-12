@@ -37,6 +37,8 @@ struct dma_chan * a4s2d_chan = NULL;
 
 DECLARE_WAIT_QUEUE_HEAD(tst1_queue);
 
+//The free_user_pages code is borrowed from drivers/misc/genwqe/card_utils.c
+//from the Linux kernel sources
 static int free_user_pages(struct page **page_list, unsigned int nr_pages,
 			   int dirty)
 {
