@@ -1,3 +1,6 @@
 The files uEnv.txt and boot.bin must be placed on the 1st, VFAT partition of the SD card 
 to allow booting of the Z-turn via TFTP from the server at 172.19.1.1
 The file boot.bin has been generated as described in main README.md
+
+This bootloader is prepared for designs using the HP0 in 32-bit mode!
+
