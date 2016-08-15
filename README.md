@@ -28,7 +28,8 @@ Except of that my SD card contains only the BOOT.bin file generated in SDK
 
 Unfortunately it appeared, that it is not trivial to build the working FSBL in Vivado 2016.2 working with Buildroot.
 The workflow that finally works for me is the following:
-
+* In Debian/testing I had multiple strange [problems](https://forums.xilinx.com/t5/Embedded-Development-Tools/Poor-operation-of-Vivado-2016-2-SDK-in-case-of-slow-Internet/td-p/715475) with Vivado SDK, before I found the [advise](https://forums.xilinx.com/t5/Embedded-Development-Tools/Vivado-2016-1-SDK-launch-problem/td-p/693615) to set the SWT_GTK3 environment variable to 0 before starting Vivado.
+Therefore you should do `export SWT_GTK3=0` before you start Vivado.
 * Ensure that your design has configured the following peripherials:
   * ENET0 (connected to MIO16-27) with MDIO (connected to MIO52-53). 
     * Remember to connect the ENET0 clock to "IO PLL" (in my design it was connected to "External" by default)
@@ -37,23 +38,26 @@ The workflow that finally works for me is the following:
   * UART1 (connected to MIO48-49)
 * After you compile your design, export the hardware (File -> Export -> Export hardware) locally to the project.
 * Then run the SDK (File -> Launch SDK)
-* In the SDK add the DT repository (Xiling Tools->Repositories, Local repositories -> New, xilinx-tree-xlnx) availeble from git://github.com/Xilinx/device-tree-xlnx.git
+* In the SDK add the DT repository (Xiling Tools->Repositories, Local repositories -> New, xilinx-tree-xlnx) available from git://github.com/Xilinx/device-tree-xlnx.git
 * In the SDK create:
-  * The new Board Support Package of type "device_tree". Build it and use the resulting dts and dtsi files in Buildroot.
+  * The new Board Support Package of type "device_tree". Build it and use the resulting dts and dtsi files in Buildroot (in my design just put them into the `software/dts` directory).
   * The new Application Project of type "Zynq FSBL" with name "fsbl". This project requires a small adjustment:
     * In the `fsbl/src/fsbl_debug.h` file add `define FSBL_DEBUG_INFO` before `#define DEBUG_GENERAL   0x00000001`. That ensures that FSBL displays possible error messages. Without that I wouldn't be able to resolve all problems related to the SD booting.
-  * Ufortunately the "Create Boot Image" option doesn't work for me. Therefore I had to create the bootimage directory and fsbl.bif file manually
-  ```
-    The_ROM_image:
-    {
-        [bootloader]../Debug/fsbl.elf
-        /tmp/u-boot.elf
-    }
-  ```
-  Of course you must copy the U-Boot in the ELF format to /tmp/u-boot.elf, after it is compiled by Bildroot. Remember to switch off SPL and select the ELF format when compiling the Buildroot. I use the configuration "zynq_zed" for the U-Boot as there is no dedicated configuration for Z-turn.
-  * In the SDK start the shell (Xilinx Tools -> Launch Shell) and in the shell do:
-  ```
-  $ cd fsbl/bootimage/
-  $ bootgen -arch zynq -image fsbl.bif -w on -o BOOT.bin
-  ```
-   
+  * Create the boot image - BOOT.bin 
+    * You should have compiled the U-Boot in the ELF format. Remember to switch off SPL and select the ELF format when compiling the Buildroot. I use the configuration "zynq_zed" for the U-Boot as there is no dedicated configuration for Z-turn. Below I assume that the compiled U-Boot has been copied to /tmp/u-boot.elf. (Buildroot compiles the U-Boot to the file `output/images/u-boot` but SDK requires that it has the `.elf` extension, soo you should anyway copy or rename the output file.)
+    * Before I learned about the `export SWT_GTK3=0` trick, the "Create Boot Image" option didn't work for me. Therefore I had to create the bootimage directory and fsbl.bif file manually
+    ```
+        The_ROM_image:
+        {
+            [bootloader]../Debug/fsbl.elf
+            /tmp/u-boot.elf
+        }
+    ```
+    In the SDK start the shell (Xilinx Tools -> Launch Shell) and in the shell do:
+    ```
+    $ cd fsbl/bootimage/
+    $ bootgen -arch zynq -image fsbl.bif -w on -o BOOT.bin
+    ```
+    * If the "Create Boot Image" option works for you, you should select the Architecture "Zynq", and mark "Create new BIF file". The list of files to be put to the boot image should already contain the "(bootloader) ...fsbl.elf" entry. Add your compiled u-boot.elf to it (add it as "datafile" with checksum set to "none").
+    You can preview the created `.bif` file. It should look like shown in the previous point (probably with an additional comment line at the begining).
+    After the `.bif` file is ready, you can create the bootimage.
