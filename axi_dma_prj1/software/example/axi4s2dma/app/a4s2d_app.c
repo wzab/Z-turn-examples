@@ -56,11 +56,11 @@ int main(int argc, char * argv[])
     perror("I can't complete the transfer");
     exit(1);
   }
-  printf("Transfer completed\n");
+  printf("Transfer completed, %d bytes transferred\n",res);
   //Now print the first characters from the buffer
   {
     int i;
-    for(i=0;i<100;i++) {
+    for(i=0;i<res;i++) {
       printf("%4.4d -> %8.8x\n",i,buf[i]);
     }
   }

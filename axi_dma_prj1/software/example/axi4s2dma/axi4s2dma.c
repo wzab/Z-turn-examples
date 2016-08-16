@@ -91,8 +91,12 @@ struct tst1_ctx_s {
   struct sg_table sgt;
   int sg_len;
   struct dma_async_tx_descriptor * atx_desc;
+  dma_cookie_t dma_cookie;
+  enum dma_status status;
+  uint32_t len;
+  uint32_t transferred;
   unsigned char is_mapped; 
-  unsigned char is_running; 
+  unsigned char is_running;
 } ;
 
 struct tst1_ctx_s tst1_ctx = {
@@ -106,6 +110,9 @@ struct tst1_ctx_s tst1_ctx = {
   },
   .is_mapped = 0,
   .is_running = 0,
+  .len = 0,
+  .transferred = 0,
+  .dma_cookie = 0,
   .sg_len = 0,
 };
 
@@ -113,9 +120,27 @@ struct tst1_ctx_s tst1_ctx = {
 void a4s2d_callback(void * arg)
 {
   struct tst1_ctx_s * p;
+  struct dma_tx_state dst;
   p = (struct tst1_ctx_s *) arg;
   p->is_running = 0;
+  //Get the number of non-transferred bytes
+  p->status = dmaengine_tx_status(a4s2d_chan,p->dma_cookie,&dst);
+  p->transferred = p->len - dst.residue;
   printk(KERN_INFO "Hi, I was in callback!");
+  switch(p->status) {
+  case DMA_COMPLETE:
+    printk( KERN_INFO "Status: DMA_COMPLETE\n");
+    break;
+  case DMA_IN_PROGRESS:
+    printk( KERN_INFO "Status: DMA_IN_PROGRESS\n");
+    break;
+  case DMA_PAUSED:
+    printk( KERN_INFO "Status: DMA_PAUSED\n");
+    break;
+  case DMA_ERROR:
+    printk( KERN_INFO "Status: DMA_ERROR\n");
+    break;
+  }
   wake_up_interruptible(&tst1_queue);
 }
 
@@ -197,6 +222,7 @@ long tst1_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
       //OK. Basic tests passed, we can start mapping
       //Code is based on http://lxr.free-electrons.com/source/drivers/misc/genwqe/card_utils.c
       pbuf = (unsigned long)desc.buf;
+      p->len = desc.len;
       offs = offset_in_page(pbuf);
       p->nr_pages = DIV_ROUND_UP(offs + desc.len, PAGE_SIZE);      
       //Allocate the list of pages
@@ -294,6 +320,7 @@ long tst1_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	printk (KERN_INFO "Failed submitting the DMA TX descriptor\n");      
 	return res;
       }
+      p->dma_cookie = res;
       dma_async_issue_pending(a4s2d_chan);
       return res;
     }
@@ -305,6 +332,7 @@ long tst1_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	return -ERESTARTSYS;
       }
       dma_sync_sg_for_cpu(a4s2d_chan->device->dev,p->sgt.sgl,p->sgt.nents, DMA_FROM_DEVICE);
+      res = p->transferred;
       return res;
     }
   default:
