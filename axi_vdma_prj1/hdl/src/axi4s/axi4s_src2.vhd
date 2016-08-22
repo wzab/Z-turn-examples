@@ -1,12 +1,12 @@
 -------------------------------------------------------------------------------
--- Title      : AXI4 Stream simple source
+-- Title      : AXI4 Stream simple source for VDMA
 -- Project    : 
 -------------------------------------------------------------------------------
--- File       : axi4s_src1.vhd
+-- File       : axi4s_src2.vhd
 -- Author     : Wojciech M. Zabolotny <wzab01@gmail.com>
 -- Company    : 
 -- Created    : 2016-08-09
--- Last update: 2016-08-11
+-- Last update: 2016-08-22
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -23,7 +23,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 -------------------------------------------------------------------------------
-entity axi4s_src1 is
+entity axi4s_src2 is
 
   port (
     -- AXI4 Stream interface
@@ -32,6 +32,7 @@ entity axi4s_src1 is
     tlast  : out std_logic;
     tready : in  std_logic;
     tvalid : out std_logic;
+    tuser  : out std_logic;
     -- System interface
     clk    : in  std_logic;
     resetn : in  std_logic;
@@ -39,9 +40,9 @@ entity axi4s_src1 is
     start  : in  std_logic
     );
 
-end entity axi4s_src1;
+end entity axi4s_src2;
 
-architecture rtl of axi4s_src1 is
+architecture rtl of axi4s_src2 is
 
   signal pkt_num : integer               := 0;
   signal s_data  : unsigned(31 downto 0) := (others => '0');
@@ -81,18 +82,21 @@ begin  -- architecture rtl
           when 0 =>
             tvalid <= '0';
             tlast  <= '0';
+            tuser <= '0';
             -- Idle state, waiting for start
             if (old_start = '0') and (start = '1') then
               pkt_num   <= 1;
               wrd_count <= 1;
               s_data    <= to_unsigned(PKT1_START, 32);
               tvalid    <= '1';
+              tuser     <= '1';
               tlast     <= '0';
             end if;
           when 1 =>
             -- Transmit packet 1
             if tready = '1' then
               if wrd_count < PKT1_LEN then
+                tuser <= '0';
                 wrd_count <= wrd_count+1;
                 s_data <= s_data + PKT1_STEP;
                 if wrd_count = PKT1_LEN-1 then
@@ -102,6 +106,7 @@ begin  -- architecture rtl
                 pkt_num   <= 2;
                 wrd_count <= 1;
                 s_data    <= to_unsigned(PKT2_START, 32);
+                tuser     <= '1';
                 tlast     <= '0';
               end if;
             end if;
@@ -109,6 +114,7 @@ begin  -- architecture rtl
             -- Transmit packet 2
             if tready = '1' then
               if wrd_count < PKT2_LEN then
+                tuser <= '0';
                 wrd_count <= wrd_count+1;
                 s_data <= s_data + PKT2_STEP;
                 if wrd_count = PKT2_LEN-1 then
@@ -118,11 +124,12 @@ begin  -- architecture rtl
                 pkt_num   <= 3;
                 wrd_count <= 1;
                 s_data    <= to_unsigned(PKT3_START, 32);
+                tuser <= '1';
                 tlast     <= '0';
               end if;
             end if;
           when 3 =>
-            -- Transmit packet 2
+            -- Transmit packet 3
             if tready = '1' then
               if wrd_count < PKT3_LEN then
                 wrd_count <= wrd_count+1;

@@ -1,4 +1,4 @@
-set eprj_proj_name "zturn_axi4s2dma_demo"
+set eprj_proj_name "zturn_axi4s2vdma_demo"
 set eprj_def_root "src"
 set eprj_top_entity "design_1_wrapper"
 set eprj_board_part ""
