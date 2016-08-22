@@ -1,0 +1,11 @@
+config BR2_PACKAGE_AXIL2IPB_MODULE
+	bool "axil2ipb-module"
+	depends on BR2_LINUX_KERNEL
+	help
+          Driver for AXIL2IPB bridge.
+          It is available as an example for my VEXTPROJ project
+
+          http://github.com/wzab/vextproj
+
+comment "axil2ipb module needs a Linux kernel to be built"
+	depends on !BR2_LINUX_KERNEL

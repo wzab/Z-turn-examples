@@ -1,0 +1,3 @@
+#!/bin/sh
+modprobe axil2ipb
+axil2ipb.py

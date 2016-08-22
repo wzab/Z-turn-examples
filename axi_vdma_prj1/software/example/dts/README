@@ -1,0 +1,15 @@
+Content of this directory should be generated from the design.
+You should "Export hardware" locally to the design, and then
+"Launch SDK" (both from "File" menu in Vivado GUI).
+In the SDK, in the "Xilinx Tools/Repositories" menu you should
+create the new local repository pointing on the device-tree-xlnx
+directory. (You can produce it by calling:
+git clone git://github.com/Xilinx/device-tree-xlnx.git )
+After adding the repository, you should select
+"File/New/Board Support Package" of "device_tree" type
+(select "device_tree" in the Board Support Package OS").
+You can leave the default name device_tree_bsp_0.
+Then you can click "OK" or "Finish" in next dialog boxes
+until you return to the main SDK window.
+
+ 

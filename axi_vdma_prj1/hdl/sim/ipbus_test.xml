@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<node>
+    <node id="CTRLREG" address="0x00000000" mask="0xffffffff" permission="rw" />
+    <node id="IDREG" address="0x00000001" mask="0xffffffff" permission="rw" />
+    <node id="STATREG" address="0x00000002" mask="0xffffffff" permission="rw" />
+    <node id="LFSR1_SET" address="0x00000004" mask="0xffffffff" permission="rw" />
+    <node id="LFSR1_SHIFT" address="0x00000005" mask="0xffffffff" permission="rw" />
+    <node id="LFSR1_READ" address="0x00000006" mask="0xffffffff" permission="rw" />
+    <node id="LFSR2_SET" address="0x00000008" mask="0xffffffff" permission="rw" />
+    <node id="LFSR2_SHIFT" address="0x00000009" mask="0xffffffff" permission="rw" />
+    <node id="LFSR2_READ" address="0x0000000a" mask="0xffffffff" permission="rw" />
+</node>

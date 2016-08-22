@@ -1,0 +1,5 @@
+ooc noauto lfsr_test_a_ooc.eprj lfsr_test_a
+ooc noauto lfsr_test_b_ooc.eprj lfsr_test_b
+vhdl xil_defaultlib lfsr_test_a_stub.vhd
+vhdl xil_defaultlib lfsr_test_b_stub.vhd
+

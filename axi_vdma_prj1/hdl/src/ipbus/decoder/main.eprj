@@ -1,0 +1,5 @@
+exec addr_dec.py
+vhdl work ipbus_addr_decode.vhd
+
+
+
