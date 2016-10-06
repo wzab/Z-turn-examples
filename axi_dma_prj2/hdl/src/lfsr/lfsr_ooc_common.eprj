@@ -1,0 +1,5 @@
+#packages from ipbus
+vhdl work ../ipbus/ipbus_package.vhd
+vhdl work ../ipbus/slaves/ipbus_reg_types.vhd
+vhdl work ../ipbus/slaves/ipbus_ctrlreg_v.vhd
+vhdl work lfsr_test.vhd
