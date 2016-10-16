@@ -1,3 +1,6 @@
 #!/bin/ash
-udhcpc ; modprobe axi4s2dma ; a4s2d_app
+modprobe axi4s2dmov
+echo 905 > /sys/class/gpio/export
+echo low > /sys/class/gpio/gpio905/direction
+echo high > /sys/class/gpio/gpio905/direction
 
