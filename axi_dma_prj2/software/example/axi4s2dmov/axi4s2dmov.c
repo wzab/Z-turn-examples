@@ -21,17 +21,21 @@ MODULE_LICENSE("GPL v2");
 #include <linux/dma-mapping.h>
 #include <linux/io.h>
 #include <linux/interrupt.h>
+#include <linux/gpio/consumer.h>
 #include <asm/uaccess.h>
+#include "axi4s2dmov.h"
+
 #define SUCCESS 0
 #define DEVICE_NAME "wzab_axi4s2dmov"
 #define CLASS_NAME "class_axi4s2dmov"
 
-#define BUF_SIZE (4096*1024)
 
 //AXI FIFO REGISTERS
 #define AF_STR_RESET 0x28
 #define AF_TX_RESET 0x8
 #define AF_RX_RESET 0x18
+#define AF_ISR 0x00
+#define AF_IER 0x04
 #define AF_RDFD 0x20
 #define AF_RDFO 0x1c
 #define AF_TDFD 0x10
@@ -45,8 +49,16 @@ static void * fmem=NULL; //Pointer to registers area
 static resource_size_t phys_addr = 0;
 static resource_size_t phys_len = 0;
 
-static void * virt_buf = NULL;
-static dma_addr_t phys_buf = 0;
+static uint32_t * virt_buf[BUF_NUM] = {[0 ... BUF_NUM-1] = NULL};
+static dma_addr_t phys_buf[BUF_NUM] = {[0 ... BUF_NUM-1] = 0};
+volatile static int blen[BUF_NUM] = {[0 ... BUF_NUM-1] = 0}; //Number of bytes in the buffer
+volatile static int bready[BUF_NUM] = {[0 ... BUF_NUM-1] = 0}; //Info if the buffer is ready
+static int received_buf = 0;
+volatile static int exp_buf = 0;
+
+int irq = -1;
+int irq_set = -1;
+
 //It is a dirty trick, but we can service only one device :-(
 static struct platform_device * my_pdev = NULL;
 
@@ -64,7 +76,7 @@ loff_t tst1_llseek(struct file *filp, loff_t off, int origin);
 int tst1_mmap(struct file *filp, struct vm_area_struct *vma);
 long tst1_ioctl(struct file *, unsigned int, unsigned long);
 
-
+DECLARE_WAIT_QUEUE_HEAD (readqueue);
 
 dev_t my_dev=0;
 struct cdev * my_cdev = NULL;
@@ -81,9 +93,83 @@ struct file_operations Fops = {
     .mmap=tst1_mmap
 };
 
+irqreturn_t tst1_irq(int irq, void * dev_id)
+{
+    int res;
+    int nbuf;
+    volatile uint32_t * regs;
+    regs = (volatile uint32_t *) fmem;
+    // First we check if our device requests interrupt
+    //printk("<1>I'm in interrupt!\n");
+    if(regs[AF_ISR/4] & 0x04000000) {
+        //Yes, this is our interrupt
+        regs[AF_ISR/4] = 0xffffffff; //Clear interrupts why all!?
+        mb();
+        while(1) {
+            res = regs[AF_RDFO/4]; //FIFO occupancy
+            if(res==0) break; //No more packets to receive
+            res = regs[AF_RLR/4];
+            if(res != 4) {
+                //This is an incorrect response, how we can hamdle it?
+                printk( KERN_ERR "Incorrect length of AXI DM status: %d, but should be 4\n",res);
+                break; //Should we really leave? How to restore proper operation?
+            }
+            //res==4 so we simply read the status word
+            res = regs[AF_RDFD/4];
+            //This is the status word. Bits 0-3 TAG, bit 4 - INTERR, bit 5 - DECERR, bit 6 - SLVERR
+            //bit 7 - OKAY, bits 30-8 - length of the transfer, bit 31 - EOP
+            if((res & (1<<7))==0) {
+                printk( KERN_ERR "Incorrect status of AXI_DM status packet, should be OKAY, value is %x\n",res);
+                break; //Again - what should be the correct action?
+            }
+            //Decode the number of the handled buffer
+            nbuf = res & 0xf;
+            //Here we should verify, that this is an expected buffer
+            if(nbuf != exp_buf) {
+                printk( KERN_ERR "Incorrect buffer number. Expected: %x, received: %x\n", exp_buf, nbuf);
+            }
+            //Decode the number of received bytes
+            blen[nbuf] = (res & 0x3fffff00) >> 8;
+            //Mark the buffer as ready
+            bready[nbuf]=1;
+            //Update the number of the expected buffer
+            exp_buf += 1;
+            if(exp_buf == BUF_NUM) exp_buf = 0;
+        }    
+        //Wake up the reading process
+        wake_up_interruptible(&readqueue);
+        return IRQ_HANDLED;
+    }
+    return IRQ_NONE; //Our device does not request interrupt
+};
+
+
+/* Function requesting transfer of the i-th buffer */
+static void transfer_buf(int i)
+{
+    volatile uint32_t * regs;
+    uint32_t val;
+    regs = (volatile uint32_t *) fmem;
+    val = (1<<22)-1 ; //Maximum length of the transfer
+    val |= (1<<23);
+    val |= (1<<30);
+    //Write it to the FIFO
+    regs[AF_TDFD/4] = val;
+    mb();
+    val = phys_buf[i];
+    regs[AF_TDFD/4] = val;
+    mb();
+    val = i;
+    regs[AF_TDFD/4] = val;
+    mb();
+    regs[AF_TLR/4] = 9; //Our command is only 9 bytes long
+    mb();
+}
+
 /* Cleanup resources */
 int tst1_remove(struct platform_device *pdev )
 {
+    int i;
     if(my_dev && class_my_tst) {
         device_destroy(class_my_tst,my_dev);
     }
@@ -103,64 +189,77 @@ int tst1_remove(struct platform_device *pdev )
         printk(KERN_INFO "Device %p removed !\n", pdev);
         my_pdev = NULL;
     }
-    if(virt_buf) dma_free_coherent(&pdev->dev,BUF_SIZE,virt_buf,phys_buf);
-    virt_buf=NULL;
-    phys_buf=0;
+    for(i=0;i<BUF_NUM;i++) {
+        if(virt_buf[i]) dma_free_coherent(&pdev->dev,BUF_SIZE,virt_buf[i],phys_buf[i]);
+        virt_buf[i]=NULL;
+        phys_buf[i]=0;
+    }
     return 0;
 }
 
 long tst1_ioctl(struct file * fd, unsigned int cmd, unsigned long arg) {
-    uint32_t val,val2, val3;
-    int i, j;
+    int i, res;
     volatile uint32_t * regs;
     regs = (volatile uint32_t *) fmem;
     switch(cmd) {
-        case 0x1234:
-            printk(KERN_INFO "ioctl 0x1234 called!");
-            //Reset the FIFOS
+        case ADM_RESET:
+            //We reset the DataMover - it requires hardware support!
+            //OK. It is done via the GPIO. However now I want to control that GPIO myself. Not via the standard driver!
+            //bit 0 - reset of the DMA engine
+            //bit 1 - start of the data generator
+            //WELL I'll do it later! (I have to investigate how to assign the proper GPIO
+            //We reset the engines
             regs[AF_STR_RESET/4]=0xa5;
             regs[AF_TX_RESET/4]=0xa5;
             regs[AF_RX_RESET/4]=0xa5;
+            //wait 1/3 second - shouldn't it be in the user space?
+            //mdelay(300);
+            return SUCCESS;
+        case ADM_START:
+            //First we check if the transfer is not started yet
+            //Set the buffer numbers
+            exp_buf = 0;
+            received_buf = 0;
+            //We submit request to transfer all buffers
+            for(i=0;i<BUF_NUM;i++) transfer_buf(i);
+            //And now we enable the interrupts
+            regs[AF_IER/4] = 0x04000000;
             mb();
-            //wait a second
-            mdelay(300);
-            //Now we program the command for the first transfer
-            val = (1<<22)-1 ; //Maximum length of the transfer
-            val |= (1<<23);
-            val |= (1<<30);
-            //Write it to the FIFO
-            regs[AF_TDFD/4] = val;
-            mb();
-            val = phys_buf;
-            regs[AF_TDFD/4] = val;
-            mb();
-            val = 7;
-            regs[AF_TDFD/4] = val;
-            mb();
-            regs[AF_TLR/4] = 9; //Our command is only 9 bytes long
-            mb();
-            //Now we wait until the transmission is completed
-            mdelay(300);
-            val=regs[AF_RDFO/4];
-            if(val==0) {
-                printk(KERN_INFO "Nothing received!\n");
-                return 0;
-            }
-            val2=regs[AF_RLR/4];
-            printk(KERN_INFO "RLR=%d\n",val2);
-            for(i=0;i<(val2+3)/4;i++) {
-                int nbytes;
-                uint8_t * bt = (uint8_t *) virt_buf;
-                val3=regs[AF_RDFD/4];
-                printk( KERN_INFO "DTA=%x\n",val3);
-                //Extract the transmitted data
-                nbytes = (val3 & 0x7fffff00) >> 8;
-                for(j=0;j<nbytes;j++) {
-                    printk( KERN_INFO "%x ", (int) *(bt++));
-                }
-                printk( KERN_INFO "\n");
-            }
-            return 0;
+            //We should be able to reset the DataMover - both the engine and the STSCMD part.
+            //It should be possible to do it under software control!
+            return SUCCESS;
+        case ADM_STOP:
+            //We simply disable the interrupts
+            regs[AF_IER/4] = 0x00000000;
+            //Here we stop the transfer. How to do it?
+            // 1) We stop resending the descriptors
+            // 2) We reset the FIFO 
+            return SUCCESS;
+        case ADM_GET:
+            //We sleep, waiting until the buffer is ready
+            res=wait_event_interruptible(readqueue, bready[received_buf] > 0);
+            if(res) return res; //Signal received!
+            //The buffer is ready to be serviced
+            //We return the number of the buffer and the number of available bits
+            res = ((received_buf) << 24) | blen[received_buf];
+            return res;
+            //W tej komendzie powinniśmy oczekiwać na dostępność kolejnego bufora (buforów?)
+            //Jeśli bufor jest, to komenda wraca. Powinna być możliwość wysłania z uśpieniem, lub bez.
+            //Oprócz tego powinniśmy mieć możliwość korzystania z "poll". Chodzi o to, żeby nie powodować niepotrzebnego
+            //mnożenia wątków
+            //
+            //Jak załatwiamy obsługę błędu "overflow"?
+            //Powinniśmy wykrywać problem polegający na tym, że zostały obsłużone wszystkie zlecenia transferu.
+            //Oznacza to, że aplikacja nie nadążyła odbierać danych.
+        case ADM_CONFIRM:
+            //Here we confirm, that we have finished servicing the buffer
+            if(bready[received_buf] == 0) return -EINVAL; //Error, the buffer was not ready, we can't confirm it!            
+            blen[received_buf] = 0;
+            bready[received_buf] = 0;
+            transfer_buf(received_buf);
+            received_buf += 1;
+            if(received_buf == BUF_NUM) received_buf = 0;
+            return SUCCESS;
         default:
             return -EINVAL;
     }
@@ -169,13 +268,26 @@ long tst1_ioctl(struct file * fd, unsigned int cmd, unsigned long arg) {
 static int tst1_open(struct inode *inode, 
                      struct file *file)
 {
+    int res;
     nonseekable_open(inode, file);
+    res=request_irq(irq,tst1_irq,IRQF_SHARED,DEVICE_NAME,my_pdev);
+    if(res) {
+        printk (KERN_INFO "wzab_tst1: I can't connect irq %d error: %d\n", irq,res);
+        irq_set = -1;
+    } else {
+        printk (KERN_INFO "wzab_tst1: Connected irq %d\n", irq);
+        irq_set = 1;
+    }
     return SUCCESS;
 }
 
 static int tst1_release(struct inode *inode, 
                         struct file *file)
 {
+    if(irq_set>=0) {
+        free_irq(irq,my_pdev); //Free interrupt
+        irq_set = -1;
+    }
     return SUCCESS;
 }
 
@@ -196,44 +308,27 @@ int tst1_mmap(struct file *filp,
     unsigned long physical;
     unsigned long vsize;
     unsigned long psize;
-    unsigned long off = vma->vm_pgoff;
-    
-    if((off<0) || (off>1)) return -EINVAL;
-    if(off==0) {
-        vsize = vma->vm_end - vma->vm_start;
-        physical = phys_addr;
-        psize = phys_len;
-        if(vsize>psize)
-            return -EINVAL;
-        //Added basing on http://4q8.de/?p=231
-        vma->vm_flags |= VM_IO;
-        vma->vm_page_prot=pgprot_noncached(vma->vm_page_prot);
-        //END
-        remap_pfn_range(vma,vma->vm_start, physical >> PAGE_SHIFT , vsize, vma->vm_page_prot);
-        if (vma->vm_ops)
-            return -EINVAL; //It should never happen
-            vma->vm_ops = &tst1_vm_ops;
-        tst1_vma_open(vma); //This time no open(vma) was called
-        //printk("<1>mmap of registers succeeded!\n");
-        return 0;
-    } else if(off==1) {
-        vsize = vma->vm_end - vma->vm_start;
-        physical = phys_buf;
-        psize = BUF_SIZE;
-        if(vsize>psize)
-            return -EINVAL;
-        remap_pfn_range(vma,vma->vm_start, physical >> PAGE_SHIFT , vsize, vma->vm_page_prot);
-        if (vma->vm_ops)
-            return -EINVAL; //It should never happen
-            vma->vm_ops = &tst1_vm_ops;
-        tst1_vma_open(vma); //This time no open(vma) was called
-        return 0;
-    }
-    return -EINVAL;
+    int res;
+    unsigned long off = vma->vm_pgoff;    
+    if((off < 0) || (off >= BUF_NUM)) return -EINVAL;
+    vsize = vma->vm_end - vma->vm_start;
+    psize = BUF_SIZE;
+    if(vsize>psize)
+        return -EINVAL;
+    #ifdef ARCH_HAS_DMA_MMAP_COHERENT
+    printk(KERN_INFO "Mapping with dma_map_coherent DMA buffer at phys: %p virt %p\n",phys_buf[off],virt_buf[off]);
+    res = dma_mmap_coherent(&my_pdev->dev, vma, virt_buf[off], phys_buf[off],  vsize);
+    #else
+    physical = virt_to_phys(phys_buf[off]);
+    res=remap_pfn_range(vma,vma->vm_start, physical >> PAGE_SHIFT , vsize, vma->vm_page_prot);
+    printk(KERN_INFO "Mapping with remap_pfn_range DMA buffer at phys: %p virt %p\n",physical,virt_buf[off]);
+    #endif
+    return res;
 }
 
 static int tst1_probe(struct platform_device *pdev)
 {
+    int i;
     int res = 0;
     struct resource * resptr = NULL;
     if (my_pdev) {
@@ -256,6 +351,14 @@ static int tst1_probe(struct platform_device *pdev)
         res= PTR_ERR(fmem);
         goto err1;
     }
+    //Connect the interrupt
+    irq = platform_get_irq(pdev,0);
+    if(irq<0) {
+        printk(KERN_ERR "Error reading the IRQ number: %d.\n",irq);
+        res=irq;
+        goto err1;
+    }
+    printk(KERN_INFO "Connected IRQ=%d\n",irq);   
     //Create the class
     class_my_tst = class_create(THIS_MODULE, CLASS_NAME);
     if (IS_ERR(class_my_tst)) {
@@ -291,13 +394,15 @@ static int tst1_probe(struct platform_device *pdev)
             MAJOR(my_dev));
     printk(KERN_INFO "Registered device at: %p\n",pdev);
     my_pdev = pdev;
-    /* Now we alloc the memory buffer */
-    virt_buf = dma_zalloc_coherent(&pdev->dev, BUF_SIZE, &phys_buf,GFP_KERNEL);
-    if(virt_buf==NULL) {
-        printk ("Allocation of the DMA buffer failed\n");
-        goto err1;
+    /* Here we create memory buffers */
+    for(i=0;i<BUF_NUM;i++) {
+        virt_buf[i] = dma_zalloc_coherent(&pdev->dev, BUF_SIZE, &phys_buf[i],GFP_KERNEL);
+        if(virt_buf[i]==NULL) {
+            printk ("Allocation of the DMA buffer nr %d failed\n",i);
+            goto err1;
+        }
+        printk(KERN_INFO "DMA buffer phys: %x, virt: %x\n", phys_buf[i], virt_buf[i]);
     }
-    printk(KERN_INFO "DMA buffer phys: %x, virt: %x\n", phys_buf, virt_buf);
     return 0;
     err1:
     if (fmem) {
