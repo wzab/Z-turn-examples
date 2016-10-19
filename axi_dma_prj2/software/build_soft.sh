@@ -20,8 +20,8 @@ tar -xjf $BRNAME.tar.bz2
 cat >> $BRNAME/package/Config.in <<AddedMenu
 menu "Additional example packages"
 	source "package/axil2ipb-module/Config.in"
-	source "package/axi4s2dma-module/Config.in"
-	source "package/axi4s2dma-test/Config.in"
+	source "package/axi4s2dmov-module/Config.in"
+	source "package/axi4s2dmov-test/Config.in"
 endmenu
 AddedMenu
 cd $BRNAME
