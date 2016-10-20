@@ -214,11 +214,16 @@ long tst1_ioctl(struct file * fd, unsigned int cmd, unsigned long arg) {
             //bit 1 - start of the data generator
             //WELL I'll do it later! (I have to investigate how to assign the proper GPIO
             //We reset the engines
+	    ksgpio_set_reset(0);
+            ksgpio_set_start(0);
+            mdelay(100);
+	    ksgpio_set_reset(1);
+            mdelay(100);
             regs[AF_STR_RESET/4]=0xa5;
             regs[AF_TX_RESET/4]=0xa5;
             regs[AF_RX_RESET/4]=0xa5;
-            //wait 1/3 second - shouldn't it be in the user space?
-            //mdelay(300);
+            //wait 1/10 second - shouldn't it be in the user space?
+            mdelay(100);
             return SUCCESS;
         case ADM_START:
             //First we check if the transfer is not started yet
@@ -230,6 +235,7 @@ long tst1_ioctl(struct file * fd, unsigned int cmd, unsigned long arg) {
             //And now we enable the interrupts
             regs[AF_IER/4] = 0x04000000;
             mb();
+            ksgpio_set_start(1);
             //We should be able to reset the DataMover - both the engine and the STSCMD part.
             //It should be possible to do it under software control!
             return SUCCESS;
@@ -409,16 +415,16 @@ static int tst1_probe(struct platform_device *pdev)
         printk(KERN_INFO "DMA buffer phys: %x, virt: %x\n", phys_buf[i], virt_buf[i]);
     }
     //Now let's blink the LED
-    for(i=0;i<10;i++) {
-       printk (KERN_INFO "SET 0\n");
-       ksgpio_set_start(0);
-       ksgpio_set_reset(0);
-       mdelay(500);
-       printk (KERN_INFO "SET 1\n");
-       ksgpio_set_start(1);
-       ksgpio_set_reset(1);
-       mdelay(500);
-    }
+    //for(i=0;i<10;i++) {
+    //   printk (KERN_INFO "SET 0\n");
+    //  ksgpio_set_start(0);
+    //   ksgpio_set_reset(0);
+    //   mdelay(500);
+    //   printk (KERN_INFO "SET 1\n");
+    //   ksgpio_set_start(1);
+    //   ksgpio_set_reset(1);
+    //   mdelay(500);
+    //}
     return 0;
     err1:
     if (fmem) {

@@ -58,14 +58,14 @@ static int tst1_probe(struct platform_device *pdev)
     }
     //Now we connect the GPIOs
     //Here we test the GPIO access
-    g_start = devm_gpiod_get_index(&pdev->dev, "myctl", 0, GPIOD_OUT_HIGH);    
+    g_start = devm_gpiod_get_index(&pdev->dev, "myctl", 1, GPIOD_OUT_HIGH);    
     if(IS_ERR(g_start)) {
         res = (int) g_start;
         printk (KERN_ERR "I can't connect to the START GPIO: error %d\n",res);
         g_start = NULL;
         goto err1;
     };
-    g_reset = devm_gpiod_get_index(&pdev->dev, "myctl", 1, GPIOD_OUT_HIGH);    
+    g_reset = devm_gpiod_get_index(&pdev->dev, "myctl", 0, GPIOD_OUT_HIGH);    
     if(IS_ERR(g_reset)) {
         res = (int) g_reset;
         printk (KERN_ERR "I can't connect to the RESET GPIO: error %d\n",res);
