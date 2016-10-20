@@ -10,7 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <asm/uaccess.h>
-MODULE_LICENSE("GPL v2");
+MODULE_LICENSE("GPL");
 #include <linux/device.h>
 #include <linux/platform_device.h>
 #include <linux/fs.h>
@@ -76,7 +76,12 @@ loff_t tst1_llseek(struct file *filp, loff_t off, int origin);
 int tst1_mmap(struct file *filp, struct vm_area_struct *vma);
 long tst1_ioctl(struct file *, unsigned int, unsigned long);
 
+//Functions provided by the ksgpio module
+void ksgpio_set_start(int val);
+void ksgpio_set_reset(int val) ;
+
 DECLARE_WAIT_QUEUE_HEAD (readqueue);
+
 
 dev_t my_dev=0;
 struct cdev * my_cdev = NULL;
@@ -402,6 +407,17 @@ static int tst1_probe(struct platform_device *pdev)
             goto err1;
         }
         printk(KERN_INFO "DMA buffer phys: %x, virt: %x\n", phys_buf[i], virt_buf[i]);
+    }
+    //Now let's blink the LED
+    for(i=0;i<10;i++) {
+       printk (KERN_INFO "SET 0\n");
+       ksgpio_set_start(0);
+       ksgpio_set_reset(0);
+       mdelay(500);
+       printk (KERN_INFO "SET 1\n");
+       ksgpio_set_start(1);
+       ksgpio_set_reset(1);
+       mdelay(500);
     }
     return 0;
     err1:
