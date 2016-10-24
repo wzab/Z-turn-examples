@@ -331,7 +331,7 @@ int tst1_mmap(struct file *filp,
     res = dma_mmap_coherent(&my_pdev->dev, vma, virt_buf[off], phys_buf[off],  vsize);
     #else
     physical = phys_buf[off];
-    res=remap_pfn_range(vma,vma->vm_start, physical >> PAGE_SHIFT , vsize, vma->vm_page_prot);
+    res=remap_pfn_range(vma,vma->vm_start, physical >> PAGE_SHIFT , vsize, pgprot_noncached(vma->vm_page_prot));
     printk(KERN_INFO "Mapping with remap_pfn_range DMA buffer at phys: %p virt %p\n",physical,virt_buf[off]);
     #endif
     return res;
