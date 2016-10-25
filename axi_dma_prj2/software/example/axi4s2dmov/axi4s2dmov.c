@@ -1,11 +1,11 @@
 /* Driver for AXI4Stream source connected via AXI DataMover
- * 
- * Copyright (C) 2016 by Wojciech M. Zabolotny
- * wzab<at>ise.pw.edu.pl
- * Significantly based on multiple drivers included in
- * sources of Linux
- * Therefore this source is licensed under GPL v2
- */
+* 
+* Copyright (C) 2016 by Wojciech M. Zabolotny
+* wzab<at>ise.pw.edu.pl
+* Significantly based on multiple drivers included in
+* sources of Linux
+* Therefore this source is licensed under GPL v2
+*/
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -55,6 +55,7 @@ volatile static int blen[BUF_NUM] = {[0 ... BUF_NUM-1] = 0}; //Number of bytes i
 volatile static int bready[BUF_NUM] = {[0 ... BUF_NUM-1] = 0}; //Info if the buffer is ready
 static int received_buf = 0;
 volatile static int exp_buf = 0;
+static int is_started = 0;
 
 int irq = -1;
 int irq_set = -1;
@@ -68,9 +69,9 @@ int init_tst1( void );
 static int tst1_open(struct inode *inode, struct file *file);
 static int tst1_release(struct inode *inode, struct file *file);
 ssize_t tst1_read(struct file *filp,
-                  char __user *buf,size_t count, loff_t *off);
+                char __user *buf,size_t count, loff_t *off);
 ssize_t tst1_write(struct file *filp,
-                   const char __user *buf,size_t count, loff_t *off);
+                const char __user *buf,size_t count, loff_t *off);
 loff_t tst1_llseek(struct file *filp, loff_t off, int origin);
 
 int tst1_mmap(struct file *filp, struct vm_area_struct *vma);
@@ -115,7 +116,7 @@ irqreturn_t tst1_irq(int irq, void * dev_id)
             if(res==0) break; //No more packets to receive
             res = regs[AF_RLR/4];
             if(res != 4) {
-                //This is an incorrect response, how we can hamdle it?
+                //This is an incorrect response, how we can handle it?
                 printk( KERN_ERR "Incorrect length of AXI DM status: %d, but should be 4\n",res);
                 break; //Should we really leave? How to restore proper operation?
             }
@@ -214,10 +215,10 @@ long tst1_ioctl(struct file * fd, unsigned int cmd, unsigned long arg) {
             //bit 1 - start of the data generator
             //WELL I'll do it later! (I have to investigate how to assign the proper GPIO
             //We reset the engines
-	    ksgpio_set_reset(0);
+        ksgpio_set_reset(0);
             ksgpio_set_start(0);
             mdelay(100);
-	    ksgpio_set_reset(1);
+        ksgpio_set_reset(1);
             mdelay(100);
             regs[AF_STR_RESET/4]=0xa5;
             regs[AF_TX_RESET/4]=0xa5;
@@ -227,9 +228,15 @@ long tst1_ioctl(struct file * fd, unsigned int cmd, unsigned long arg) {
             return SUCCESS;
         case ADM_START:
             //First we check if the transfer is not started yet
+            if(is_started) {
+                printk(KERN_ERR "Acquisition is already started!\n");
+                return -EINVAL;
+            }
             //Set the buffer numbers
             exp_buf = 0;
             received_buf = 0;
+            //Clear the ready flag in all buffers
+            for(i=0;i<BUF_NUM;i++) bready[i]=0;
             //We submit request to transfer all buffers
             for(i=0;i<BUF_NUM;i++) transfer_buf(i);
             //And now we enable the interrupts
@@ -238,13 +245,15 @@ long tst1_ioctl(struct file * fd, unsigned int cmd, unsigned long arg) {
             ksgpio_set_start(1);
             //We should be able to reset the DataMover - both the engine and the STSCMD part.
             //It should be possible to do it under software control!
+            is_started = 1;
             return SUCCESS;
         case ADM_STOP:
             //We simply disable the interrupts
             regs[AF_IER/4] = 0x00000000;
             //Here we stop the transfer. How to do it?
             // 1) We stop resending the descriptors
-            // 2) We reset the FIFO 
+            // 2) We reset the FIFO
+            is_started = 0; 
             return SUCCESS;
         case ADM_GET:
             //We sleep, waiting until the buffer is ready
@@ -277,7 +286,7 @@ long tst1_ioctl(struct file * fd, unsigned int cmd, unsigned long arg) {
 }
 
 static int tst1_open(struct inode *inode, 
-                     struct file *file)
+                    struct file *file)
 {
     int res;
     nonseekable_open(inode, file);
@@ -314,7 +323,7 @@ static struct vm_operations_struct tst1_vm_ops = {
 };
 
 int tst1_mmap(struct file *filp,
-              struct vm_area_struct *vma)
+            struct vm_area_struct *vma)
 {
     unsigned long physical;
     unsigned long vsize;
