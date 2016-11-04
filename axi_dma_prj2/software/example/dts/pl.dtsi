@@ -68,11 +68,5 @@
 			xlnx,tri-default = <0xFFFFFFFF>;
 			xlnx,tri-default-2 = <0xFFFFFFFF>;
 		};
-		ksgpio {
-			compatible = "wzab,ksgpio";
-			myctl-gpios = <&axi_gpio_ctl 0 0>, /* reset */
-                        	      <&axi_gpio_ctl 1 0>; /* start */
-		};
-
 	};
 };

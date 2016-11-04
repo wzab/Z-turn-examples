@@ -8,6 +8,7 @@
 /dts-v1/;
 /include/ "zynq-7000.dtsi"
 /include/ "pl.dtsi"
+/include/ "ksgpio.dtsi"
 / {
 	cpus {
 		cpu@0 {
