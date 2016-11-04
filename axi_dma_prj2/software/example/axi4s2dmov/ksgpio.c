@@ -39,91 +39,115 @@ int init_tst1( void );
 
 int tst1_remove(struct platform_device *pdev )
 {
+  if(my_pdev == pdev) {
     if(g_start) {
-	devm_gpiod_put(&pdev->dev, g_start);
+      devm_gpiod_put(&pdev->dev, g_start);
     }
     if(g_reset) {
-	devm_gpiod_put(&pdev->dev, g_reset);
+      devm_gpiod_put(&pdev->dev, g_reset);
     }
     return 0;
+  } else {
+    return -ENODEV;
+  }
 }
 
 static int tst1_probe(struct platform_device *pdev)
 {
-    int res = 0;
-    if (my_pdev) {
-        //We can't handle more than one device
-        printk(KERN_INFO "The driver handles already one device: %p\n", my_pdev);
-        return -EINVAL;
-    }
-    //Now we connect the GPIOs
-    //Here we test the GPIO access
-    g_start = devm_gpiod_get_index(&pdev->dev, "myctl", 1, GPIOD_OUT_HIGH);    
-    if(IS_ERR(g_start)) {
-        res = (int) g_start;
-        printk (KERN_ERR "I can't connect to the START GPIO: error %d\n",res);
-        g_start = NULL;
-        goto err1;
-    };
-    g_reset = devm_gpiod_get_index(&pdev->dev, "myctl", 0, GPIOD_OUT_HIGH);    
-    if(IS_ERR(g_reset)) {
-        res = (int) g_reset;
-        printk (KERN_ERR "I can't connect to the RESET GPIO: error %d\n",res);
-        g_reset = NULL;
-        goto err1;
-    };
-    res = SUCCESS;
-    return res;
-    err1:
-      tst1_remove(pdev);
-    return res;
+  int res = 0;
+  if (my_pdev) {
+    //We can't handle more than one device
+    printk(KERN_INFO "The driver handles already one device: %p\n", my_pdev);
+    return -EINVAL;
+  }
+  //Now we connect the GPIOs
+  //Here we test the GPIO access
+  g_start = devm_gpiod_get_index(&pdev->dev, "myctl", 1, GPIOD_OUT_HIGH);    
+  if(IS_ERR(g_start)) {
+    res = (int) g_start;
+    printk (KERN_ERR "I can't connect to the START GPIO: error %d\n",res);
+    g_start = NULL;
+    goto err1;
+  };
+  g_reset = devm_gpiod_get_index(&pdev->dev, "myctl", 0, GPIOD_OUT_HIGH);    
+  if(IS_ERR(g_reset)) {
+    res = (int) g_reset;
+    printk (KERN_ERR "I can't connect to the RESET GPIO: error %d\n",res);
+    g_reset = NULL;
+    goto err1;
+  };
+  res = SUCCESS;
+  my_pdev = pdev;
+  return res;
+ err1:
+  tst1_remove(pdev);
+  return res;
 }
 
 //We connect to the platform device
 static struct of_device_id ksgpio_driver_ids[] = {
-    {
-        .compatible = "wzab,ksgpio",
-    },
-    {},
+  {
+    .compatible = "wzab,ksgpio",
+  },
+  {},
 };
 
 static struct platform_driver my_driver = {
-    .driver = { 
-        .name = DEVICE_NAME,
-        .of_match_table = ksgpio_driver_ids,
-    },
-    .probe = tst1_probe,
-    .remove = tst1_remove,
+  .driver = { 
+    .name = DEVICE_NAME,
+    .of_match_table = ksgpio_driver_ids,
+  },
+  .probe = tst1_probe,
+  .remove = tst1_remove,
 };
 
 static int tst1_init_module(void)
 {
-    /* when a module, this is printed whether or not devices are found in probe */
-    #ifdef MODULE
-    //  printk(version);
-    #endif
-    printk(KERN_ALERT "Welcome to KSGPIO\n");
-    return platform_driver_register(&my_driver);
+  /* when a module, this is printed whether or not devices are found in probe */
+#ifdef MODULE
+  //  printk(version);
+#endif
+  printk(KERN_ALERT "Welcome to KSGPIO\n");
+  return platform_driver_register(&my_driver);
 }
 
 
 static void tst1_cleanup_module(void)
 {
-    printk(KERN_ALERT "KSGPIO says good-bye\n");
-    platform_driver_unregister(&my_driver);
+  printk(KERN_ALERT "KSGPIO says good-bye\n");
+  platform_driver_unregister(&my_driver);
+}
+
+//Exported function to check status of the GPIOS
+int ksgpio_check_status(void)
+{
+  if(my_pdev && g_start && g_reset) return SUCCESS;
+  else return -ENODEV;
 }
 
 //Exported functions to control GPIOS
-void ksgpio_set_start(int val) 
+int ksgpio_set_start(int val) 
 {
+  if(g_start) {
     gpiod_set_value(g_start,val);
+    return SUCCESS;
+  } else {
+    return -ENODEV;
+  }
+
 }
 
-void ksgpio_set_reset(int val) 
+int ksgpio_set_reset(int val) 
 {
+  if(g_reset) {
     gpiod_set_value(g_reset,val);
+    return SUCCESS;
+  } else {
+    return -ENODEV;
+  }
 }
 
+EXPORT_SYMBOL_GPL(ksgpio_check_status);
 EXPORT_SYMBOL_GPL(ksgpio_set_start);
 EXPORT_SYMBOL_GPL(ksgpio_set_reset);
 
