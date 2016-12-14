@@ -348,14 +348,9 @@ int tst1_mmap(struct file *filp,
   psize = BUF_SIZE;
   if(vsize>psize)
     return -EINVAL;
-#ifdef ARCH_HAS_DMA_MMAP_COHERENT
   printk(KERN_INFO "Mapping with dma_map_coherent DMA buffer at phys: %p virt %p\n",phys_buf[off],virt_buf[off]);
-  res = dma_mmap_coherent(&my_pdev->dev, vma, virt_buf[off], phys_buf[off],  vsize);
-#else
-  physical = phys_buf[off];
-  res=remap_pfn_range(vma,vma->vm_start, physical >> PAGE_SHIFT , vsize, pgprot_noncached(vma->vm_page_prot));
-  printk(KERN_INFO "Mapping with remap_pfn_range DMA buffer at phys: %p virt %p\n",physical,virt_buf[off]);
-#endif
+  vma->vm_pgoff = 0; //We use the offset to pass the number or the buffer!
+  res = dma_mmap_coherent(&my_pdev->dev, vma, virt_buf[off], phys_buf[off],  BUF_SIZE);
   return res;
 }
 
