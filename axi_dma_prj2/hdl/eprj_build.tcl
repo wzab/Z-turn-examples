@@ -6,6 +6,8 @@ current_run -synthesis [get_runs synth_1]
 current_run -implementation [get_runs impl_1]
 puts "INFO: Project loaded:$eprj_proj_name"
 reset_run synth_1
+# Generate targets for all BD files (it seems, that Vivado does not always do it automaticallly!)
+generate_target -force { synthesis implementation } [get_files *.bd -of_objects [get_filesets sources_1]]
 # Two lines below are the workaround for the problem reported here:
 # https://forums.xilinx.com/t5/Synthesis/Vivado-incorrect-automatic-compilation-order-in-OOC-synthesis/td-p/698067
 # In fact there should be the list of the OOC runs created by the eprj_create.tcl
