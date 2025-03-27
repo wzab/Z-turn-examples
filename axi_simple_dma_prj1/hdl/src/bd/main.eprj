@@ -1,0 +1,4 @@
+bd design_1.bd
+xdc_ooc design_1_ooc.xdc
+vhdl work design_1_wrapper.vhd
+
