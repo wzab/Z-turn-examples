@@ -1,5 +1,5 @@
 set eprj_proj_name "zturn_axi_simple_dma_demo"
-set eprj_def_root "src"
+set eprj_def_root "."
 set eprj_top_entity "design_1_wrapper"
 set eprj_board_part ""
 set eprj_part "xc7z020clg400-1"
