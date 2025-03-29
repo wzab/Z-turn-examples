@@ -1,0 +1,7 @@
+obj-m := demo_dma1.o dma1_ctrl.o
+
+
+
+
+
+

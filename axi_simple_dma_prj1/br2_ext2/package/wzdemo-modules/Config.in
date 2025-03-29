@@ -1,0 +1,10 @@
+config BR2_PACKAGE_WZDEMO_MODULES
+	bool "wzdemo-modules"
+	depends on BR2_LINUX_KERNEL
+	help
+          Modules used for demonstration.
+
+          http://www.nowhere
+
+comment "wzdemo-modules needs a Linux kernel to be built"
+	depends on !BR2_LINUX_KERNEL
