@@ -260,8 +260,8 @@ begin
             when others =>
               slv_reg1 <= slv_reg1;
               slv_reg2 <= slv_reg2;
-              slv_reg3 <= slv_reg3;
-              slv_reg4 <= slv_reg4;
+              --slv_reg3 <= slv_reg3;
+              --slv_reg4 <= slv_reg4;
           end case;
         end if;
       end if;
