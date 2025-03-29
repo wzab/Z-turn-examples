@@ -3059,7 +3059,7 @@
       },
       "dma1_0": {
         "vlnv": "WZab:hls:dma1:1.35",
-        "ip_revision": "174328727",
+        "ip_revision": "174328781",
         "xci_name": "design_1_dma1_0_0",
         "xci_path": "ip/design_1_dma1_0_0/design_1_dma1_0_0.xci",
         "inst_hier_path": "dma1_0",
@@ -3132,7 +3132,7 @@
                 "value_src": "constant"
               },
               "FREQ_HZ": {
-                "value": "1e+08",
+                "value": "100000000",
                 "value_src": "user_prop"
               },
               "ID_WIDTH": {
@@ -3358,7 +3358,7 @@
                 "value_src": "constant"
               },
               "FREQ_HZ": {
-                "value": "1e+08",
+                "value": "100000000",
                 "value_src": "user_prop"
               },
               "CLK_DOMAIN": {
@@ -3382,8 +3382,8 @@
       "const_0_29b": {
         "vlnv": "xilinx.com:ip:xlconstant:1.1",
         "ip_revision": "9",
-        "xci_name": "design_1_xlconstant_0_0",
-        "xci_path": "ip/design_1_xlconstant_0_0/design_1_xlconstant_0_0.xci",
+        "xci_name": "design_1_const_0_29b_0",
+        "xci_path": "ip/design_1_const_0_29b_0/design_1_const_0_29b_0.xci",
         "inst_hier_path": "const_0_29b",
         "parameters": {
           "CONST_VAL": {
