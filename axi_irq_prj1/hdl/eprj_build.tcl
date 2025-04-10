@@ -21,7 +21,7 @@ if [expr [llength $ooc_runs] > 0] {
     foreach { run } $ooc_runs {
         reset_run $run
     }
-    launch_runs $ooc_runs -jobs 4
+    launch_runs $ooc_runs -jobs 16
     launch_runs synth_1 -scripts_only
     foreach { run } $ooc_runs {
         set_property NEEDS_REFRESH 0 [get_runs $run]
@@ -29,11 +29,14 @@ if [expr [llength $ooc_runs] > 0] {
     reset_run synth_1
 }
 # End of workaround
-launch_runs synth_1 -jobs 4
+launch_runs synth_1 -jobs 16
 wait_on_run synth_1
 reset_run impl_1
-launch_runs impl_1 -jobs 4
+launch_runs impl_1 -jobs 16
 wait_on_run impl_1
 launch_runs impl_1 -to_step write_bitstream
 wait_on_run impl_1
 puts "INFO: Project compiled:$eprj_proj_name"
+# Export the hardware
+write_hw_platform -fixed -include_bit -force -file $eprj_proj_name.xsa
+puts "INFO: Project exported:$eprj_proj_name"

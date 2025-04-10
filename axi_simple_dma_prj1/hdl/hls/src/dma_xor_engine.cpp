@@ -24,7 +24,8 @@ void dma1(volatile uint32_t * a, uint32_t count, uint32_t key) {
         int curlen = BLOCK_SIZE < todo ? BLOCK_SIZE : todo;
         memcpy(buff, (const uint32_t *)(a+offset), curlen * sizeof(uint32_t));
         for (i = 0; i < curlen; i++) {
-            buff[i] = buff[i] ^ key;
+            buff[i] = i + key;
+            //buff[i] = buff[i] ^ key;
         }
         memcpy((uint32_t *)(a+offset), buff, curlen * sizeof(uint32_t));
         todo -= curlen;
