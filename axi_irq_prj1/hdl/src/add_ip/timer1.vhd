@@ -6,7 +6,7 @@
 -- Author     : Wojciech M. Zabołotny  <wojciech.zabolotny@pw.edu.pl>
 -- Company    : Institute of Electronic Systems
 -- Created    : 2022-04-13
--- Last update: 2022-04-23
+-- Last update: 2025-04-11
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -- License    : BSD 2-Clause License
@@ -78,7 +78,7 @@ end entity timer1;
 architecture rtl of timer1 is
 
 -- Type declarations
-  type main_fsm_type is (reset, idle, read_transaction_in_progress, read_transaction_in_progress_2, write_transaction_in_progress, complete);
+  type main_fsm_type is (reset, idle, read_transaction_in_progress, write_transaction_in_progress, complete);
 
   signal current_state, next_state            : main_fsm_type;
   signal write_enable_registers               : std_logic;
@@ -152,25 +152,11 @@ begin
           when others => null;
         end case;
 
-        -- Handling of read transaction had to be changed, as described in
-        -- https://www.fpgarelated.com/showthread/comp.arch.fpga/127408-1.php
-        --
-        -- The Intel/Altera interconnect does not accept RVALID in the same
-        -- cycle when ARREADY is asserted.
-        -- Therefore, an additional state read_transaction_in_progress_2
-        -- had to be introduced.
-
       when read_transaction_in_progress =>
-        next_state    <= read_transaction_in_progress;
+        next_state <= read_transaction_in_progress;
         S_AXI_ARREADY <= S_AXI_ARVALID;
-        if S_AXI_ARVALID = '1' then
-          next_state <= read_transaction_in_progress_2;
-        end if;
-
-      when read_transaction_in_progress_2 =>
-        next_state            <= read_transaction_in_progress;
-        S_AXI_RVALID          <= '1';
-        S_AXI_RRESP           <= "00";
+        S_AXI_RVALID <= '1';
+        S_AXI_RRESP <= "00";
         send_read_data_to_AXI <= '1';
         if S_AXI_RREADY = '1' then
           next_state <= complete;

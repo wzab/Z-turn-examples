@@ -19,9 +19,6 @@
       "util_vector_logic_0": "",
       "axi_gpio_0": "",
       "axi_gpio_1": "",
-      "axi_mem_intercon": {
-        "s00_couplers": {}
-      },
       "timer1_0": "",
       "smartconnect_0": ""
     },
@@ -1534,15 +1531,6 @@
           "PCW_SPI_PERIPHERAL_VALID": {
             "value": "0"
           },
-          "PCW_S_AXI_HP0_DATA_WIDTH": {
-            "value": "32"
-          },
-          "PCW_S_AXI_HP0_FREQMHZ": {
-            "value": "100"
-          },
-          "PCW_S_AXI_HP0_ID_WIDTH": {
-            "value": "6"
-          },
           "PCW_TPIU_PERIPHERAL_CLKSRC": {
             "value": "External"
           },
@@ -1849,6 +1837,9 @@
           "PCW_USE_AXI_FABRIC_IDLE": {
             "value": "0"
           },
+          "PCW_USE_AXI_NONSECURE": {
+            "value": "0"
+          },
           "PCW_USE_CORESIGHT": {
             "value": "0"
           },
@@ -1907,7 +1898,7 @@
             "value": "0"
           },
           "PCW_USE_S_AXI_HP0": {
-            "value": "1"
+            "value": "0"
           },
           "PCW_USE_S_AXI_HP1": {
             "value": "0"
@@ -1944,11 +1935,6 @@
               "maximum": "0x7FFFFFFF",
               "width": "32"
             }
-          },
-          "S_AXI_HP0": {
-            "vlnv": "xilinx.com:interface:aximm_rtl:1.0",
-            "mode": "Slave",
-            "memory_map_ref": "S_AXI_HP0"
           }
         },
         "addressing": {
@@ -2182,174 +2168,6 @@
         "parameters": {
           "C_ALL_OUTPUTS": {
             "value": "1"
-          }
-        }
-      },
-      "axi_mem_intercon": {
-        "vlnv": "xilinx.com:ip:axi_interconnect:2.1",
-        "xci_path": "ip/design_1_axi_mem_intercon_0/design_1_axi_mem_intercon_0.xci",
-        "inst_hier_path": "axi_mem_intercon",
-        "xci_name": "design_1_axi_mem_intercon_0",
-        "parameters": {
-          "NUM_MI": {
-            "value": "1"
-          }
-        },
-        "interface_ports": {
-          "S00_AXI": {
-            "mode": "Slave",
-            "vlnv_bus_definition": "xilinx.com:interface:aximm:1.0",
-            "vlnv": "xilinx.com:interface:aximm_rtl:1.0"
-          },
-          "M00_AXI": {
-            "mode": "Master",
-            "vlnv_bus_definition": "xilinx.com:interface:aximm:1.0",
-            "vlnv": "xilinx.com:interface:aximm_rtl:1.0"
-          }
-        },
-        "ports": {
-          "ACLK": {
-            "type": "clk",
-            "direction": "I",
-            "parameters": {
-              "ASSOCIATED_RESET": {
-                "value": "ARESETN"
-              }
-            }
-          },
-          "ARESETN": {
-            "type": "rst",
-            "direction": "I"
-          },
-          "S00_ACLK": {
-            "type": "clk",
-            "direction": "I",
-            "parameters": {
-              "ASSOCIATED_BUSIF": {
-                "value": "S00_AXI"
-              },
-              "ASSOCIATED_RESET": {
-                "value": "S00_ARESETN"
-              }
-            }
-          },
-          "S00_ARESETN": {
-            "type": "rst",
-            "direction": "I"
-          },
-          "M00_ACLK": {
-            "type": "clk",
-            "direction": "I",
-            "parameters": {
-              "ASSOCIATED_BUSIF": {
-                "value": "M00_AXI"
-              },
-              "ASSOCIATED_RESET": {
-                "value": "M00_ARESETN"
-              }
-            }
-          },
-          "M00_ARESETN": {
-            "type": "rst",
-            "direction": "I"
-          }
-        },
-        "components": {
-          "s00_couplers": {
-            "interface_ports": {
-              "M_AXI": {
-                "mode": "Master",
-                "vlnv_bus_definition": "xilinx.com:interface:aximm:1.0",
-                "vlnv": "xilinx.com:interface:aximm_rtl:1.0"
-              },
-              "S_AXI": {
-                "mode": "Slave",
-                "vlnv_bus_definition": "xilinx.com:interface:aximm:1.0",
-                "vlnv": "xilinx.com:interface:aximm_rtl:1.0"
-              }
-            },
-            "ports": {
-              "M_ACLK": {
-                "type": "clk",
-                "direction": "I",
-                "parameters": {
-                  "ASSOCIATED_BUSIF": {
-                    "value": "M_AXI"
-                  },
-                  "ASSOCIATED_RESET": {
-                    "value": "M_ARESETN"
-                  }
-                }
-              },
-              "M_ARESETN": {
-                "type": "rst",
-                "direction": "I"
-              },
-              "S_ACLK": {
-                "type": "clk",
-                "direction": "I",
-                "parameters": {
-                  "ASSOCIATED_BUSIF": {
-                    "value": "S_AXI"
-                  },
-                  "ASSOCIATED_RESET": {
-                    "value": "S_ARESETN"
-                  }
-                }
-              },
-              "S_ARESETN": {
-                "type": "rst",
-                "direction": "I"
-              }
-            },
-            "interface_nets": {
-              "s00_couplers_to_s00_couplers": {
-                "interface_ports": [
-                  "S_AXI",
-                  "M_AXI"
-                ]
-              }
-            }
-          }
-        },
-        "interface_nets": {
-          "axi_mem_intercon_to_s00_couplers": {
-            "interface_ports": [
-              "S00_AXI",
-              "s00_couplers/S_AXI"
-            ]
-          },
-          "s00_couplers_to_axi_mem_intercon": {
-            "interface_ports": [
-              "s00_couplers/M_AXI",
-              "M00_AXI"
-            ]
-          }
-        },
-        "nets": {
-          "S00_ACLK_1": {
-            "ports": [
-              "S00_ACLK",
-              "s00_couplers/S_ACLK"
-            ]
-          },
-          "S00_ARESETN_1": {
-            "ports": [
-              "S00_ARESETN",
-              "s00_couplers/S_ARESETN"
-            ]
-          },
-          "axi_mem_intercon_ACLK_net": {
-            "ports": [
-              "M00_ACLK",
-              "s00_couplers/M_ACLK"
-            ]
-          },
-          "axi_mem_intercon_ARESETN_net": {
-            "ports": [
-              "M00_ARESETN",
-              "s00_couplers/M_ARESETN"
-            ]
           }
         }
       },
@@ -2739,12 +2557,6 @@
       }
     },
     "interface_nets": {
-      "axi_mem_intercon_M00_AXI": {
-        "interface_ports": [
-          "axi_mem_intercon/M00_AXI",
-          "processing_system7_0/S_AXI_HP0"
-        ]
-      },
       "processing_system7_0_DDR": {
         "interface_ports": [
           "processing_system7_0/DDR",
@@ -2800,15 +2612,11 @@
         "ports": [
           "processing_system7_0/FCLK_CLK0",
           "processing_system7_0/M_AXI_GP0_ACLK",
-          "processing_system7_0/S_AXI_HP0_ACLK",
           "axi_gpio_0/s_axi_aclk",
           "axi_gpio_1/s_axi_aclk",
-          "axi_mem_intercon/ACLK",
-          "axi_mem_intercon/S00_ACLK",
-          "axi_mem_intercon/M00_ACLK",
           "rst_processing_system7_0_100M/slowest_sync_clk",
-          "timer1_0/S_AXI_ACLK",
-          "smartconnect_0/aclk"
+          "smartconnect_0/aclk",
+          "timer1_0/S_AXI_ACLK"
         ]
       },
       "processing_system7_0_FCLK_CLK1": {
@@ -2823,21 +2631,13 @@
           "rst_processing_system7_0_100M/ext_reset_in"
         ]
       },
-      "rst_processing_system7_0_100M_interconnect_aresetn": {
-        "ports": [
-          "rst_processing_system7_0_100M/interconnect_aresetn",
-          "axi_mem_intercon/ARESETN"
-        ]
-      },
       "rst_processing_system7_0_100M_peripheral_aresetn": {
         "ports": [
           "rst_processing_system7_0_100M/peripheral_aresetn",
           "axi_gpio_0/s_axi_aresetn",
           "axi_gpio_1/s_axi_aresetn",
-          "axi_mem_intercon/S00_ARESETN",
-          "axi_mem_intercon/M00_ARESETN",
-          "timer1_0/S_AXI_ARESETN",
-          "smartconnect_0/aresetn"
+          "smartconnect_0/aresetn",
+          "timer1_0/S_AXI_ARESETN"
         ]
       },
       "util_vector_logic_0_Res": {
