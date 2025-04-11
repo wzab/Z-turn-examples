@@ -1,0 +1,1 @@
+source "$BR2_EXTERNAL_SWIS2_PATH/package/wzdemo-modules/Config.in"
