@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <iostream>
 
-void dma1(volatile uin32_t t* a, uint32_t count, uint32_t key);
+void dma1(volatile uint32_t * a, uint32_t count, uint32_t key);
 uint32_t tdta[1000];
 
 int main(void)

@@ -10,6 +10,7 @@ void dma1(volatile uint32_t * a, uint32_t count, uint32_t key) {
 #pragma HLS INTERFACE s_axilite port = count bundle = control
 #pragma HLS INTERFACE s_axilite port = key bundle = control
 
+//#pragma HLS DATAFLOW
 
     int i;
     uint32_t buff[BLOCK_SIZE];
@@ -21,11 +22,12 @@ void dma1(volatile uint32_t * a, uint32_t count, uint32_t key) {
     unsigned long todo = count;
     unsigned long offset = 0;
     while(todo) {
+//#pragma HLS PIPELINE
         int curlen = BLOCK_SIZE < todo ? BLOCK_SIZE : todo;
         memcpy(buff, (const uint32_t *)(a+offset), curlen * sizeof(uint32_t));
         for (i = 0; i < curlen; i++) {
-            buff[i] = i + key;
-            //buff[i] = buff[i] ^ key;
+            //buff[i] = i + key;
+            buff[i] = buff[i] ^ key;
         }
         memcpy((uint32_t *)(a+offset), buff, curlen * sizeof(uint32_t));
         todo -= curlen;

@@ -3059,7 +3059,7 @@
       },
       "dma1_0": {
         "vlnv": "WZab:hls:dma1:1.35",
-        "ip_revision": "174328781",
+        "ip_revision": "174437507",
         "xci_name": "design_1_dma1_0_0",
         "xci_path": "ip/design_1_dma1_0_0/design_1_dma1_0_0.xci",
         "inst_hier_path": "dma1_0",
