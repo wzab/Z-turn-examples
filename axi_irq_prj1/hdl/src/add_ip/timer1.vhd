@@ -1,39 +1,54 @@
 -------------------------------------------------------------------------------
--- Title      : timer1 
--- Project    : 
+-- Title      : timer1
+-- Project    :
 -------------------------------------------------------------------------------
 -- File       : timer1.vhd
 -- Author     : Wojciech M. Zabołotny  <wojciech.zabolotny@pw.edu.pl>
 -- Company    : Institute of Electronic Systems
 -- Created    : 2022-04-13
--- Last update: 2025-04-11
--- Platform   : 
+-- Last update: 2026-04-20
+-- Platform   :
 -- Standard   : VHDL'93/02
 -- License    : BSD 2-Clause License
 -------------------------------------------------------------------------------
 -- Description:
 --   Timer for SWIS course (based on the QEMU model)
+--
+--   This version contains a reworked AXI4-Lite front-end:
+--   * independent registered handling of read and write channels,
+--   * no dependency between latched address and address-valid flag,
+--   * exactly one register write per accepted AXI write transaction,
+--   * SLVERR returned for invalid accesses,
+--   * only aligned 32-bit reads are accepted,
+--   * only aligned full-word 32-bit writes are accepted (WSTRB="1111"),
+--   * timer low-word read latches the full 64-bit counter for coherent
+--     subsequent high-word read.
+--
+-- Notes:
+--   The port widths are kept compatible with the original file, including
+--   S_AXI_ARPROT/S_AXI_AWPROT declared as std_logic.
+--
+-- Register map:
+--   0x00 : ID    (RO)  = 0x7130900d
+--   0x04 : STAT  (RW)  bit 0: IRQ enable, bit 31 (read-only): IRQ pending
+--   0x08 : DIVL  (RW)  lower 32 bits of divisor / reload value
+--   0x0C : DIVH  (RW)  upper 32 bits of divisor / reload value
+--   0x10 : CNTL  (RO/W) read low word of counter and latch full counter,
+--                       write clears pending IRQ
+--   0x14 : CNTH  (RO)  high word of latched counter
+--
+--   Recommended SW sequence when programming timer limit:
+--     1) write DIVH
+--     2) write DIVL   -- this arms the new timer value
+--
 -- Credits:
---   The code is significantly based on the
+--   The original code was significantly based on the
 --   axi_rc_servo_controller.vhd from
 --   https://github.com/Architech-Silica/Designing-a-Custom-AXI-Slave-Peripheral
---   BSD 2-Clause License
---   Copyright (c) 2018, Architech (Silica EMEA)
---   All rights reserved.
---
 -------------------------------------------------------------------------------
--- Copyright (c) 2022 
--------------------------------------------------------------------------------
--- Revisions  :
--- Date        Version  Author  Description
--- 2022-04-13  1.0      WZab    Created
--------------------------------------------------------------------------------
-
 
 library ieee;
 use ieee.std_logic_1164.all;
---use ieee.std_logic_arith.all;
---use ieee.std_logic_unsigned.all;
 use ieee.numeric_std.all;
 
 library work;
@@ -77,18 +92,35 @@ end entity timer1;
 
 architecture rtl of timer1 is
 
--- Type declarations
-  type main_fsm_type is (reset, idle, read_transaction_in_progress, write_transaction_in_progress, complete);
+  constant AXI_RESP_OKAY   : std_logic_vector(1 downto 0) := "00";
+  constant AXI_RESP_SLVERR : std_logic_vector(1 downto 0) := "10";
 
-  signal current_state, next_state            : main_fsm_type;
-  signal write_enable_registers               : std_logic;
-  signal send_read_data_to_AXI                : std_logic;
-  signal Local_Reset                          : std_logic;
-  signal combined_S_AXI_AWVALID_S_AXI_ARVALID : std_logic_vector(1 downto 0);
-  signal local_address                        : integer range 0 to 2**C_S_AXI_ADDR_WIDTH;
-  signal local_address_valid                  : std_logic;
+  constant ADDR_ID   : integer := 0;
+  constant ADDR_STAT : integer := 4;
+  constant ADDR_DIVL : integer := 8;
+  constant ADDR_DIVH : integer := 12;
+  constant ADDR_CNTL : integer := 16;
+  constant ADDR_CNTH : integer := 20;
 
-  signal id_register   : std_logic_vector(31 downto 0) := (others => '0');
+  signal Local_Reset : std_logic;
+
+  -- Write channel state
+  signal awaddr_reg : std_logic_vector(C_S_AXI_ADDR_WIDTH-1 downto 0) := (others => '0');
+  signal wdata_reg  : std_logic_vector(C_S_AXI_DATA_WIDTH-1 downto 0) := (others => '0');
+  signal wstrb_reg  : std_logic_vector((C_S_AXI_DATA_WIDTH/8)-1 downto 0) := (others => '0');
+  signal aw_pending : std_logic := '0';
+  signal w_pending  : std_logic := '0';
+  signal bvalid_reg : std_logic := '0';
+  signal bresp_reg  : std_logic_vector(1 downto 0) := AXI_RESP_OKAY;
+
+  -- Read channel state
+  signal araddr_reg : std_logic_vector(C_S_AXI_ADDR_WIDTH-1 downto 0) := (others => '0');
+  signal rvalid_reg : std_logic := '0';
+  signal rresp_reg  : std_logic_vector(1 downto 0) := AXI_RESP_OKAY;
+  signal rdata_reg  : std_logic_vector(C_S_AXI_DATA_WIDTH-1 downto 0) := (others => '0');
+
+  -- Register bank
+  signal id_register   : std_logic_vector(31 downto 0) := x"7130900d";
   signal stat_reg      : std_logic_vector(31 downto 0) := (others => '0');
   signal stat_register : std_logic_vector(31 downto 0) := (others => '0');
   signal divl_register : std_logic_vector(31 downto 0) := (others => '0');
@@ -96,280 +128,259 @@ architecture rtl of timer1 is
   signal cntl_register : std_logic_vector(31 downto 0) := (others => '0');
   signal cnth_register : std_logic_vector(31 downto 0) := (others => '0');
 
-  signal id_register_address_valid   : std_logic := '0';
-  signal stat_register_address_valid : std_logic := '0';
-  signal divl_register_address_valid : std_logic := '0';
-  signal divh_register_address_valid : std_logic := '0';
-  signal cntl_register_address_valid : std_logic := '0';
-  signal cnth_register_address_valid : std_logic := '0';
+  signal timer_latch : unsigned(63 downto 0) := (others => '0');
+  signal timer_count : unsigned(63 downto 0) := (others => '0');
+  signal timer_limit : unsigned(63 downto 0) := (others => '0');
 
-  signal timer_latch, timer_count, timer_limit : unsigned(63 downto 0);
+  signal irq_req   : std_logic := '0';
+  signal irq_clear : std_logic := '0';
+  signal set_timer : std_logic := '0';
 
-  signal irq_req, irq_clear, set_timer : std_logic := '0';
+  function decode_valid(addr : std_logic_vector) return std_logic is
+    variable a : integer;
+  begin
+    a := to_integer(unsigned(addr));
+    case a is
+      when ADDR_ID | ADDR_STAT | ADDR_DIVL | ADDR_DIVH | ADDR_CNTL | ADDR_CNTH =>
+        return '1';
+      when others =>
+        return '0';
+    end case;
+  end function;
+
+  function read_is_word_access(addr : std_logic_vector) return std_logic is
+  begin
+    if addr'length < 2 then
+      return '0';
+    elsif addr(1 downto 0) = "00" then
+      return '1';
+    else
+      return '0';
+    end if;
+  end function;
+
+  function write_is_full_word(
+    addr  : std_logic_vector;
+    wstrb : std_logic_vector)
+    return std_logic is
+  begin
+    if addr'length < 2 then
+      return '0';
+    elsif addr(1 downto 0) /= "00" then
+      return '0';
+    elsif wstrb /= "1111" then
+      return '0';
+    else
+      return '1';
+    end if;
+  end function;
+
+  function read_mux(
+    addr          : std_logic_vector;
+    id_reg        : std_logic_vector(31 downto 0);
+    stat_reg_in   : std_logic_vector(31 downto 0);
+    divl_reg      : std_logic_vector(31 downto 0);
+    divh_reg      : std_logic_vector(31 downto 0);
+    cntl_reg_in   : std_logic_vector(31 downto 0);
+    cnth_reg_in   : std_logic_vector(31 downto 0))
+    return std_logic_vector is
+    variable a : integer;
+  begin
+    a := to_integer(unsigned(addr));
+    case a is
+      when ADDR_ID   => return id_reg;
+      when ADDR_STAT => return stat_reg_in;
+      when ADDR_DIVL => return divl_reg;
+      when ADDR_DIVH => return divh_reg;
+      when ADDR_CNTL => return cntl_reg_in;
+      when ADDR_CNTH => return cnth_reg_in;
+      when others    => return (others => '0');
+    end case;
+  end function;
 
 begin
 
-  Local_Reset                          <= not S_AXI_ARESETN;
-  combined_S_AXI_AWVALID_S_AXI_ARVALID <= S_AXI_AWVALID & S_AXI_ARVALID;
+  Local_Reset <= not S_AXI_ARESETN;
 
-
-  state_machine_update : process (S_AXI_ACLK)
-  begin
-    if S_AXI_ACLK'event and S_AXI_ACLK = '1' then
-      if Local_Reset = '1' then
-        current_state <= reset;
-      else
-        current_state <= next_state;
-      end if;
-    end if;
-  end process;
-
-  state_machine_decisions : process (S_AXI_ARVALID, S_AXI_AWVALID,
-                                     S_AXI_BREADY, S_AXI_RREADY, S_AXI_WVALID,
-                                     combined_S_AXI_AWVALID_S_AXI_ARVALID,
-                                     current_state)
-  begin
-    S_AXI_ARREADY          <= '0';
-    S_AXI_RRESP            <= "--";
-    S_AXI_RVALID           <= '0';
-    S_AXI_WREADY           <= '0';
-    S_AXI_BRESP            <= "--";
-    S_AXI_BVALID           <= '0';
-    S_AXI_WREADY           <= '0';
-    S_AXI_AWREADY          <= '0';
-    write_enable_registers <= '0';
-    send_read_data_to_AXI  <= '0';
-
-    case current_state is
-      when reset =>
-        next_state <= idle;
-
-      when idle =>
-        next_state <= idle;
-        case combined_S_AXI_AWVALID_S_AXI_ARVALID is
-          when "01"   => next_state <= read_transaction_in_progress;
-          when "10"   => next_state <= write_transaction_in_progress;
-          when others => null;
-        end case;
-
-      when read_transaction_in_progress =>
-        next_state <= read_transaction_in_progress;
-        S_AXI_ARREADY <= S_AXI_ARVALID;
-        S_AXI_RVALID <= '1';
-        S_AXI_RRESP <= "00";
-        send_read_data_to_AXI <= '1';
-        if S_AXI_RREADY = '1' then
-          next_state <= complete;
-        end if;
-
-      when write_transaction_in_progress =>
-        next_state             <= write_transaction_in_progress;
-        write_enable_registers <= '1';
-        S_AXI_AWREADY          <= S_AXI_AWVALID;
-        S_AXI_WREADY           <= S_AXI_WVALID;
-        S_AXI_BRESP            <= "00";
-        S_AXI_BVALID           <= '1';
-        if S_AXI_BREADY = '1' then
-          next_state <= complete;
-        end if;
-
-      when complete =>
-        case combined_S_AXI_AWVALID_S_AXI_ARVALID is
-          when "00"   => next_state <= idle;
-          when others => next_state <= complete;
-        end case;
-
-      when others =>
-        next_state <= reset;
-    end case;
-  end process;
-
-  send_data_to_AXI_RDATA : process (cnth_register, cntl_register,
-                                    divh_register, divl_register, id_register,
-                                    local_address, local_address_valid,
-                                    send_read_data_to_AXI, stat_register)
-  begin
-    S_AXI_RDATA <= (others => '-');
-    if (local_address_valid = '1' and send_read_data_to_AXI = '1') then
-      case (local_address) is
-        when 0 =>
-          S_AXI_RDATA <= id_register;
-        when 4 =>
-          S_AXI_RDATA <= stat_register;
-        when 8 =>
-          S_AXI_RDATA <= divl_register;
-        when 12 =>
-          S_AXI_RDATA <= divh_register;
-        when 16 =>
-          S_AXI_RDATA <= cntl_register;
-        when 20 =>
-          S_AXI_RDATA <= cnth_register;
-        when others => null;
-      end case;
-    end if;
-  end process;
-
-  local_address_capture_register : process (S_AXI_ACLK)
-  begin
-    if (S_AXI_ACLK'event and S_AXI_ACLK = '1') then
-      if Local_Reset = '1' then
-        local_address <= 0;
-      else
-        if local_address_valid = '1' then
-          case (combined_S_AXI_AWVALID_S_AXI_ARVALID) is
-            when "10"   => local_address <= to_integer(unsigned(S_AXI_AWADDR(C_S_AXI_ADDR_WIDTH-1 downto 0)));
-            when "01"   => local_address <= to_integer(unsigned(S_AXI_ARADDR(C_S_AXI_ADDR_WIDTH-1 downto 0)));
-            when others => local_address <= local_address;
-          end case;
-        end if;
-      end if;
-    end if;
-  end process;
-
-  address_range_analysis : process (local_address)
-  begin
-    id_register_address_valid   <= '0';
-    stat_register_address_valid <= '0';
-    divl_register_address_valid <= '0';
-    divh_register_address_valid <= '0';
-    cntl_register_address_valid <= '0';
-    cnth_register_address_valid <= '0';
-    local_address_valid         <= '1';
-
-    case (local_address) is
-      when 0 => id_register_address_valid   <= '1';
-      when 4 => stat_register_address_valid <= '1';
-      when 8 =>
-        divl_register_address_valid <= '1';
-      when 12 =>
-        divh_register_address_valid <= '1';
-      when 16 =>
-        cntl_register_address_valid <= '1';
-      when 20 =>
-        cnth_register_address_valid <= '1';
-      when others =>
-        local_address_valid <= '0';
-    end case;
-  end process;
-
-  id_register <= x"7130900d";
-
-
-  stat_register_process : process (S_AXI_ACLK)
-  begin
-    if (S_AXI_ACLK'event and S_AXI_ACLK = '1') then
-      if Local_Reset = '1' then
-        stat_reg <= (others => '0');
-      elsif stat_register_address_valid = '1' then
-        if send_read_data_to_AXI = '1' then
-          -- Actions taken when reading the register
-          null;
-        end if;
-        if write_enable_registers = '1' then
-          -- Actions taken when writing the register
-          stat_reg <= S_AXI_WDATA and x"00000001";
-        end if;
-      end if;
-    end if;
-  end process;
-
-  stat_register <= stat_reg when irq_req = '0'                                else (stat_reg or x"80000000");
-  irq           <= '1'      when (irq_req = '1') and (stat_register(0) = '1') else '0';
-
-  divl_register_process : process (S_AXI_ACLK)
-  begin
-    if (S_AXI_ACLK'event and S_AXI_ACLK = '1') then
-      set_timer <= '0';
-      if Local_Reset = '1' then
-        divl_register <= (others => '0');
-      elsif divl_register_address_valid = '1' then
-        if send_read_data_to_AXI = '1' then
-          -- Actions taken when reading the register
-          null;
-        end if;
-        if write_enable_registers = '1' then
-          -- Actions taken when writing the register
-          divl_register <= S_AXI_WDATA;
-          set_timer     <= '1';         -- The timer will be set in the next
-        -- clock period
-        end if;
-      end if;
-    end if;
-  end process;
-
-  divh_register_process : process (S_AXI_ACLK)
-  begin
-    if (S_AXI_ACLK'event and S_AXI_ACLK = '1') then
-      if Local_Reset = '1' then
-        divh_register <= (others => '0');
-      elsif divh_register_address_valid = '1' then
-        if send_read_data_to_AXI = '1' then
-          -- Actions taken when reading the register
-          null;
-        end if;
-        if write_enable_registers = '1' then
-          -- Actions taken when writing the register
-          divh_register <= S_AXI_WDATA;
-        end if;
-      end if;
-    end if;
-  end process;
-
-
-  cntl_register_process : process (S_AXI_ACLK)
-  begin
-    if (S_AXI_ACLK'event and S_AXI_ACLK = '1') then
-      irq_clear <= '0';
-      if Local_Reset = '1' then
-        timer_latch <= (others => '0');
-      elsif cntl_register_address_valid = '1' then
-        if send_read_data_to_AXI = '1' then
-          -- Actions taken when reading the register
-          timer_latch <= timer_count;
-        end if;
-        if write_enable_registers = '1' then
-          -- Actions taken when writing the register
-          irq_clear <= '1';
-        end if;
-      end if;
-    end if;
-  end process;
-  cntl_register <= std_logic_vector(timer_count(31 downto 0));
-
-  cnth_register_process : process (S_AXI_ACLK)
-  begin
-    if (S_AXI_ACLK'event and S_AXI_ACLK = '1') then
-      if Local_Reset = '1' then
-        null;
-      elsif cnth_register_address_valid = '1' then
-        if send_read_data_to_AXI = '1' then
-          -- Actions taken when reading the register
-          null;
-        end if;
-        if write_enable_registers = '1' then
-          -- Actions taken when writing the register
-          null;
-        end if;
-      end if;
-    end if;
-  end process;
+  stat_register <= stat_reg when irq_req = '0' else (stat_reg or x"80000000");
+  cntl_register <= std_logic_vector(timer_latch(31 downto 0));
   cnth_register <= std_logic_vector(timer_latch(63 downto 32));
 
+  irq <= '1' when (irq_req = '1') and (stat_reg(0) = '1') else '0';
 
-  -- Counter process
-  counter : process (S_AXI_ACLK) is
-  begin  -- process
-    if S_AXI_ACLK'event and S_AXI_ACLK = '1' then  -- rising clock edge
+  -- AXI output mapping
+  S_AXI_BVALID <= bvalid_reg;
+  S_AXI_BRESP  <= bresp_reg;
+  S_AXI_RVALID <= rvalid_reg;
+  S_AXI_RRESP  <= rresp_reg;
+  S_AXI_RDATA  <= rdata_reg;
+
+  -- Ready generation:
+  -- * collect AW and W independently,
+  -- * execute one write transaction at a time,
+  -- * allow one outstanding read response at a time.
+  S_AXI_AWREADY <= '1' when (aw_pending = '0' and bvalid_reg = '0') else '0';
+  S_AXI_WREADY  <= '1' when (w_pending  = '0' and bvalid_reg = '0') else '0';
+  S_AXI_ARREADY <= '1' when (rvalid_reg = '0' and bvalid_reg = '0' and aw_pending = '0' and w_pending = '0') else '0';
+
+  axi_register_bank : process (S_AXI_ACLK)
+    variable wr_addr_int : integer;
+    variable rd_addr_int : integer;
+  begin
+    if rising_edge(S_AXI_ACLK) then
+      irq_clear <= '0';
+      set_timer <= '0';
+
+      if Local_Reset = '1' then
+        awaddr_reg    <= (others => '0');
+        wdata_reg     <= (others => '0');
+        wstrb_reg     <= (others => '0');
+        aw_pending    <= '0';
+        w_pending     <= '0';
+        bvalid_reg    <= '0';
+        bresp_reg     <= AXI_RESP_OKAY;
+
+        araddr_reg    <= (others => '0');
+        rvalid_reg    <= '0';
+        rresp_reg     <= AXI_RESP_OKAY;
+        rdata_reg     <= (others => '0');
+
+        stat_reg      <= (others => '0');
+        divl_register <= (others => '0');
+        divh_register <= (others => '0');
+        timer_latch   <= (others => '0');
+
+      else
+        -- Capture write address
+        if (S_AXI_AWVALID = '1') and (S_AXI_AWREADY = '1') then
+          awaddr_reg <= S_AXI_AWADDR;
+          aw_pending <= '1';
+        end if;
+
+        -- Capture write data
+        if (S_AXI_WVALID = '1') and (S_AXI_WREADY = '1') then
+          wdata_reg <= S_AXI_WDATA;
+          wstrb_reg <= S_AXI_WSTRB;
+          w_pending <= '1';
+        end if;
+
+        -- Execute exactly one write after both AW and W were accepted
+        if (aw_pending = '1') and (w_pending = '1') and (bvalid_reg = '0') then
+          wr_addr_int := to_integer(unsigned(awaddr_reg));
+
+          if (decode_valid(awaddr_reg) = '1') and (write_is_full_word(awaddr_reg, wstrb_reg) = '1') then
+            case wr_addr_int is
+              when ADDR_STAT =>
+                -- Only bit 0 is writable; bit 31 is a read-only IRQ pending flag.
+                stat_reg  <= wdata_reg and x"00000001";
+                bresp_reg <= AXI_RESP_OKAY;
+
+              when ADDR_DIVL =>
+                divl_register <= wdata_reg;
+                set_timer     <= '1';
+                bresp_reg     <= AXI_RESP_OKAY;
+
+              when ADDR_DIVH =>
+                divh_register <= wdata_reg;
+                bresp_reg     <= AXI_RESP_OKAY;
+
+              when ADDR_CNTL =>
+                irq_clear <= '1';
+                bresp_reg <= AXI_RESP_OKAY;
+
+              when ADDR_ID | ADDR_CNTH =>
+                -- Existing register, but read-only for write accesses.
+                bresp_reg <= AXI_RESP_SLVERR;
+
+              when others =>
+                bresp_reg <= AXI_RESP_SLVERR;
+            end case;
+          else
+            -- Invalid address, partial write, or unaligned write.
+            bresp_reg <= AXI_RESP_SLVERR;
+          end if;
+
+          bvalid_reg <= '1';
+          aw_pending <= '0';
+          w_pending  <= '0';
+        end if;
+
+        -- Complete write response
+        if (bvalid_reg = '1') and (S_AXI_BREADY = '1') then
+          bvalid_reg <= '0';
+        end if;
+
+        -- Accept and serve one read transaction
+        if (S_AXI_ARVALID = '1') and (S_AXI_ARREADY = '1') then
+          araddr_reg <= S_AXI_ARADDR;
+          rd_addr_int := to_integer(unsigned(S_AXI_ARADDR));
+
+          if (decode_valid(S_AXI_ARADDR) = '1') and (read_is_word_access(S_AXI_ARADDR) = '1') then
+            rresp_reg <= AXI_RESP_OKAY;
+
+            case rd_addr_int is
+              when ADDR_CNTL =>
+                -- Latch the whole 64-bit counter so that a subsequent CNTH read
+                -- returns the upper word from the same snapshot.
+                timer_latch <= timer_count;
+                rdata_reg   <= std_logic_vector(timer_count(31 downto 0));
+
+              when ADDR_CNTH =>
+                rdata_reg <= std_logic_vector(timer_latch(63 downto 32));
+
+              when others =>
+                rdata_reg <= read_mux(
+                  S_AXI_ARADDR,
+                  id_register,
+                  stat_register,
+                  divl_register,
+                  divh_register,
+                  cntl_register,
+                  cnth_register);
+            end case;
+          else
+            -- Invalid address or unaligned read.
+            rresp_reg <= AXI_RESP_SLVERR;
+            rdata_reg <= (others => '0');
+          end if;
+
+          rvalid_reg <= '1';
+        end if;
+
+        -- Complete read response
+        if (rvalid_reg = '1') and (S_AXI_RREADY = '1') then
+          rvalid_reg <= '0';
+        end if;
+      end if;
+    end if;
+  end process;
+
+  -- Counter / timer core
+  counter : process (S_AXI_ACLK)
+  begin
+    if rising_edge(S_AXI_ACLK) then
       if Local_Reset = '1' then
         timer_count <= (others => '0');
+        timer_limit <= (others => '0');
         irq_req     <= '0';
       else
         -- Clear interrupt if required
         if irq_clear = '1' then
           irq_req <= '0';
         end if;
+
+        -- Program timer if required. The timer is armed after writing DIVL.
+        if set_timer = '1' then
+          timer_count <= (others => '0');
+          if unsigned(divh_register & divl_register) /= 0 then
+            timer_limit <= unsigned(divh_register & divl_register) - 1;
+          else
+            timer_limit <= (others => '0');
+          end if;
+          irq_req <= '0';
+
         -- Normal counting
-        if timer_limit /= 0 then
+        elsif timer_limit /= 0 then
           if timer_count /= timer_limit then
             timer_count <= timer_count + 1;
           else
@@ -377,15 +388,8 @@ begin
             irq_req     <= '1';
           end if;
         end if;
-        -- Set timer if required
-        if set_timer = '1' then
-          timer_count <= (others => '0');
-          timer_limit <= unsigned(divh_register & divl_register)-1;
-          irq_req     <= '0';
-        end if;
       end if;
     end if;
   end process;
-
 
 end rtl;
