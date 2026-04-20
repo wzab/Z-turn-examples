@@ -14,37 +14,27 @@
 -- Description:
 --   Timer for SWIS course (based on the QEMU model)
 --
---   This version contains a reworked AXI4-Lite front-end:
---   * independent registered handling of read and write channels,
---   * no dependency between latched address and address-valid flag,
---   * exactly one register write per accepted AXI write transaction,
---   * SLVERR returned for invalid accesses,
---   * only aligned 32-bit reads are accepted,
---   * only aligned full-word 32-bit writes are accepted (WSTRB="1111"),
---   * timer low-word read latches the full 64-bit counter for coherent
---     subsequent high-word read.
+--   This version contains a reworked AXI4-Lite frontend with the
+--   following properties:
+--     * no dependency between captured address and address-valid flag,
+--     * exactly one register write per accepted AXI write transaction,
+--     * invalid / unaligned / partial accesses return SLVERR,
+--     * only aligned 32-bit reads are accepted,
+--     * only aligned full-word 32-bit writes are accepted (WSTRB = "1111"),
+--     * CNTL read latches the full 64-bit counter for a consistent CNTH read.
 --
--- Notes:
---   The port widths are kept compatible with the original file, including
---   S_AXI_ARPROT/S_AXI_AWPROT declared as std_logic.
---
--- Register map:
---   0x00 : ID    (RO)  = 0x7130900d
---   0x04 : STAT  (RW)  bit 0: IRQ enable, bit 31 (read-only): IRQ pending
---   0x08 : DIVL  (RW)  lower 32 bits of divisor / reload value
---   0x0C : DIVH  (RW)  upper 32 bits of divisor / reload value
---   0x10 : CNTL  (RO/W) read low word of counter and latch full counter,
+--   Register map:
+--     0x00 : ID    (RO)  identification register
+--     0x04 : STAT  (RW)  bit 0 = IRQ enable, bit 31 = IRQ pending (read-only)
+--     0x08 : DIVL  (RW)  lower 32 bits of divisor / reload value
+--     0x0C : DIVH  (RW)  upper 32 bits of divisor / reload value
+--     0x10 : CNTL  (RO/W) read low word of counter and latch full counter,
 --                       write clears pending IRQ
---   0x14 : CNTH  (RO)  high word of latched counter
+--     0x14 : CNTH  (RO)  high word of latched counter
 --
 --   Recommended SW sequence when programming timer limit:
 --     1) write DIVH
 --     2) write DIVL   -- this arms the new timer value
---
--- Credits:
---   The original code was significantly based on the
---   axi_rc_servo_controller.vhd from
---   https://github.com/Architech-Silica/Designing-a-Custom-AXI-Slave-Peripheral
 -------------------------------------------------------------------------------
 
 library ieee;
@@ -104,6 +94,11 @@ architecture rtl of timer1 is
 
   signal Local_Reset : std_logic;
 
+  -- Ready signals kept internal so the code remains VHDL-93/02 friendly
+  signal awready_i : std_logic := '0';
+  signal wready_i  : std_logic := '0';
+  signal arready_i : std_logic := '0';
+
   -- Write channel state
   signal awaddr_reg : std_logic_vector(C_S_AXI_ADDR_WIDTH-1 downto 0) := (others => '0');
   signal wdata_reg  : std_logic_vector(C_S_AXI_DATA_WIDTH-1 downto 0) := (others => '0');
@@ -114,7 +109,6 @@ architecture rtl of timer1 is
   signal bresp_reg  : std_logic_vector(1 downto 0) := AXI_RESP_OKAY;
 
   -- Read channel state
-  signal araddr_reg : std_logic_vector(C_S_AXI_ADDR_WIDTH-1 downto 0) := (others => '0');
   signal rvalid_reg : std_logic := '0';
   signal rresp_reg  : std_logic_vector(1 downto 0) := AXI_RESP_OKAY;
   signal rdata_reg  : std_logic_vector(C_S_AXI_DATA_WIDTH-1 downto 0) := (others => '0');
@@ -150,9 +144,7 @@ architecture rtl of timer1 is
 
   function read_is_word_access(addr : std_logic_vector) return std_logic is
   begin
-    if addr'length < 2 then
-      return '0';
-    elsif addr(1 downto 0) = "00" then
+    if addr(1 downto 0) = "00" then
       return '1';
     else
       return '0';
@@ -164,9 +156,7 @@ architecture rtl of timer1 is
     wstrb : std_logic_vector)
     return std_logic is
   begin
-    if addr'length < 2 then
-      return '0';
-    elsif addr(1 downto 0) /= "00" then
+    if addr(1 downto 0) /= "00" then
       return '0';
     elsif wstrb /= "1111" then
       return '0';
@@ -209,19 +199,22 @@ begin
   irq <= '1' when (irq_req = '1') and (stat_reg(0) = '1') else '0';
 
   -- AXI output mapping
-  S_AXI_BVALID <= bvalid_reg;
-  S_AXI_BRESP  <= bresp_reg;
-  S_AXI_RVALID <= rvalid_reg;
-  S_AXI_RRESP  <= rresp_reg;
-  S_AXI_RDATA  <= rdata_reg;
+  S_AXI_AWREADY <= awready_i;
+  S_AXI_WREADY  <= wready_i;
+  S_AXI_ARREADY <= arready_i;
+  S_AXI_BVALID  <= bvalid_reg;
+  S_AXI_BRESP   <= bresp_reg;
+  S_AXI_RVALID  <= rvalid_reg;
+  S_AXI_RRESP   <= rresp_reg;
+  S_AXI_RDATA   <= rdata_reg;
 
   -- Ready generation:
   -- * collect AW and W independently,
   -- * execute one write transaction at a time,
   -- * allow one outstanding read response at a time.
-  S_AXI_AWREADY <= '1' when (aw_pending = '0' and bvalid_reg = '0') else '0';
-  S_AXI_WREADY  <= '1' when (w_pending  = '0' and bvalid_reg = '0') else '0';
-  S_AXI_ARREADY <= '1' when (rvalid_reg = '0' and bvalid_reg = '0' and aw_pending = '0' and w_pending = '0') else '0';
+  awready_i <= '1' when (aw_pending = '0' and bvalid_reg = '0') else '0';
+  wready_i  <= '1' when (w_pending  = '0' and bvalid_reg = '0') else '0';
+  arready_i <= '1' when (rvalid_reg = '0' and bvalid_reg = '0' and aw_pending = '0' and w_pending = '0') else '0';
 
   axi_register_bank : process (S_AXI_ACLK)
     variable wr_addr_int : integer;
@@ -240,7 +233,6 @@ begin
         bvalid_reg    <= '0';
         bresp_reg     <= AXI_RESP_OKAY;
 
-        araddr_reg    <= (others => '0');
         rvalid_reg    <= '0';
         rresp_reg     <= AXI_RESP_OKAY;
         rdata_reg     <= (others => '0');
@@ -252,13 +244,13 @@ begin
 
       else
         -- Capture write address
-        if (S_AXI_AWVALID = '1') and (S_AXI_AWREADY = '1') then
+        if (S_AXI_AWVALID = '1') and (awready_i = '1') then
           awaddr_reg <= S_AXI_AWADDR;
           aw_pending <= '1';
         end if;
 
         -- Capture write data
-        if (S_AXI_WVALID = '1') and (S_AXI_WREADY = '1') then
+        if (S_AXI_WVALID = '1') and (wready_i = '1') then
           wdata_reg <= S_AXI_WDATA;
           wstrb_reg <= S_AXI_WSTRB;
           w_pending <= '1';
@@ -311,8 +303,7 @@ begin
         end if;
 
         -- Accept and serve one read transaction
-        if (S_AXI_ARVALID = '1') and (S_AXI_ARREADY = '1') then
-          araddr_reg <= S_AXI_ARADDR;
+        if (S_AXI_ARVALID = '1') and (arready_i = '1') then
           rd_addr_int := to_integer(unsigned(S_AXI_ARADDR));
 
           if (decode_valid(S_AXI_ARADDR) = '1') and (read_is_word_access(S_AXI_ARADDR) = '1') then
